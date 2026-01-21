@@ -2,13 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <base id="ddBase" href="">
+  <script>
+  (function(){
+    try{
+      var b=document.getElementById("ddBase");
+      if(!b) return;
+      if(location.protocol==="http:"||location.protocol==="https:") b.href="/";
+      else b.href="";
+    }catch(e){}
+  })();
+  </script>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Dungeons Deep — ASCII Roguelike</title>
-  <link rel="icon" href="/images/icons/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="96x96" href="/images/icons/favicon-96x96.png">
-  <link rel="icon" type="image/svg+xml" href="/images/icons/favicon.svg">
-  <link rel="apple-touch-icon" href="/images/icons/apple-touch-icon.png">
-  <link rel="manifest" href="/images/icons/site.webmanifest">
+  <link rel="icon" href="images/icons/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="96x96" href="images/icons/favicon-96x96.png">
+  <link rel="icon" type="image/svg+xml" href="images/icons/favicon.svg">
+  <link rel="apple-touch-icon" href="images/icons/apple-touch-icon.png">
+  <link rel="manifest" href="images/icons/site.webmanifest">
   <meta name="theme-color" content="#000000">
   <style>
   .skip-btn{
@@ -465,7 +476,7 @@ button{
 .splash-reveal {
   position: absolute;
   inset: 0;
-  background-image: url("/images/dd_logo.jpg");
+  background-image: url("images/dd_logo.jpg");
   background-size: cover;
   background-position: center;
   image-rendering: auto;
@@ -619,7 +630,7 @@ button{
         </button>
         <div class="legend-body" id="controlsBody" style="margin-top:10px;" data-collapsed="false">
 <div class="controls-body">
-          <img class="controls-keypad" src="/images/ui/keypad.png" alt="Movement keys" />
+          <img class="controls-keypad" src="images/ui/keypad.png" alt="Movement keys" />
           <div class="controls-lines">
             <div><b>Wait</b> <kbd title="Wait (.)">.</kbd></div>
             <div><b>Descend</b> <kbd title="Descend (&gt;)">&gt;</kbd></div>
@@ -660,7 +671,7 @@ button{
   </div>
 </div>
 
-  <audio id="bgm" src="/music/dungeons deep.mp3" preload="auto"></audio>
+  <audio id="bgm" src="music/dungeons deep.mp3" preload="auto"></audio>
 
 <script>
   let __visualLoopStarted = false;
@@ -909,7 +920,7 @@ const ENT = {
     __CORPSE_IMGS = files.map(src => {
       const img = new Image();
       img.decoding = "async";
-      img.src = src;
+      img.src = resolveAsset("img", src);
       return img;
     });
     return __CORPSE_IMGS;
@@ -1307,11 +1318,11 @@ const __corpseImg3 = new Image();
 const __corpseImg4 = new Image();
 const __corpseImg5 = new Image();
 
-__corpseImg1.src = "/images/corpse_1_transparent.png";
-__corpseImg2.src = "/images/corpse_2_transparent.png";
-__corpseImg3.src = "/images/corpse_3_transparent.png";
-__corpseImg4.src = "/images/corpse_4_transparent.png";
-__corpseImg5.src = "/images/corpse_5_transparent.png";
+__corpseImg1.src = "images/corpse_1_transparent.png";
+__corpseImg2.src = "images/corpse_2_transparent.png";
+__corpseImg3.src = "images/corpse_3_transparent.png";
+__corpseImg4.src = "images/corpse_4_transparent.png";
+__corpseImg5.src = "images/corpse_5_transparent.png";
 
 const __corpseOnLoad = () => { try{ requestGlyphAnimFrame(); }catch(_e){} };
 __corpseImg1.onload = __corpseOnLoad;
@@ -1953,24 +1964,36 @@ gctx.restore();
 
 
 // ---------- ASSET PATHS (single source of truth) ----------
-// NOTE: Keep this block ABOVE the audio/SFX systems so it is defined before first use.
+// NOTE: This block is renderer-neutral and safe.
+// We rely on <base id="ddBase"> (set in <head>) so relative URLs work on both:
+// - file:// (base="") => "images/..." resolves to sibling folder
+// - http(s):// (base="/") => "images/..." resolves to "/images/..."
 const ASSET = {
-  img:   "/images/",
-  music: "/music/",
-  sfx:   "/sounds/"
+  img:   "images/",
+  music: "music/",
+  sfx:   "sounds/"
 };
 
 function __isSpecialUrl(s){
   return /^(data:|blob:|https?:)/i.test(String(s || ""));
 }
 
-// If src is already a path (contains '/'), or a special URL, leave it alone.
-// Otherwise prefix with the folder for that asset kind.
+// Prefix bare filenames OR subpaths (e.g. "soundtrack/..") unless already rooted.
 function resolveAsset(kind, src){
   if(!src) return src;
   if(__isSpecialUrl(src)) return src;
-  if(String(src).includes("/")) return src;
-  return (ASSET[kind] || "") + src;
+
+  const s = String(src);
+
+  // Explicitly rooted / already relative
+  if(s.startsWith("/") || s.startsWith("./") || s.startsWith("../")) return s;
+
+  // Already kind-rooted (avoid double-prefix)
+  if(kind === "img"   && s.startsWith("images/")) return s;
+  if(kind === "music" && s.startsWith("music/"))  return s;
+  if(kind === "sfx"   && s.startsWith("sounds/")) return s;
+
+  return (ASSET[kind] || "") + s;
 }
 
 // Try URLs in order; return the first successful response (resp.ok).
@@ -2175,29 +2198,29 @@ async function fetchWithFallback(urls, fetchOpts){
         { src: "music_prologue_ocean1.mp3", weight: 2 },
         { src: "music_dwarvish_crumbling_stair.mp3", weight: 2 },
         { src: "music_the_mourning_childrens_choir.mp3", weight: 2 },
-        // --- Soundtrack (/music/soundtrack) ---
-        { src: "/music/soundtrack/02 Adventuring.mp3", weight: 0.25 },
-        { src: "/music/soundtrack/03 Miserere.mp3", weight: 0.5 },
-        { src: "/music/soundtrack/04 The Mourning of Eve.mp3", weight: 0.5 },
-        { src: "/music/soundtrack/05 Don't Sleep.mp3", weight: 1 },
-        { src: "/music/soundtrack/06 Dungeon March.mp3", weight: 1 },
-        { src: "/music/soundtrack/07 Ilqua Vanda.mp3", weight: 0.5 },
-        { src: "/music/soundtrack/08 Liturgy of Valor.mp3", weight: 0.5 },
-        { src: "/music/soundtrack/09 Alter.mp3", weight: 0.25 },
-        { src: "/music/soundtrack/10 Return.mp3", weight: 0.5 },
-        { src: "/music/soundtrack/11 Metal and Stone.mp3", weight: 1 },
-        { src: "/music/soundtrack/12 Gorgy.mp3", weight: 0.5 },
-        { src: "/music/soundtrack/13 The Mourning of Eve (Interlude).mp3", weight: 2 },
-        { src: "/music/soundtrack/14 Mother's Lament.mp3", weight: 0.5 },
-        { src: "/music/soundtrack/15 River to Light.mp3", weight: 0.5 },
-        { src: "/music/soundtrack/16 The Intercessor.mp3", weight: 0.75 },
-        { src: "/music/soundtrack/17 Unwelcome Party.mp3", weight: 0.25 },
-        { src: "/music/soundtrack/18 River to Light (Interlude).mp3", weight: 1.5 },
-        { src: "/music/soundtrack/19 Venite Exultemus.mp3", weight: 0.25 },
-        { src: "/music/soundtrack/20 Antiphonary.mp3", weight: 0.5 },
-        { src: "/music/soundtrack/21 River to Light (Instrumental).mp3", weight: 0.5 },
-        { src: "/music/soundtrack/23 River to Light (Reprise).mp3", weight: 0.5 },
-        { src: "/music/soundtrack/24 End Theme.mp3", weight: 0.25 },
+        // --- Soundtrack (music/soundtrack) ---
+        { src: "music/soundtrack/02 Adventuring.mp3", weight: 0.25 },
+        { src: "music/soundtrack/03 Miserere.mp3", weight: 0.5 },
+        { src: "music/soundtrack/04 The Mourning of Eve.mp3", weight: 0.5 },
+        { src: "music/soundtrack/05 Don't Sleep.mp3", weight: 1 },
+        { src: "music/soundtrack/06 Dungeon March.mp3", weight: 1 },
+        { src: "music/soundtrack/07 Ilqua Vanda.mp3", weight: 0.5 },
+        { src: "music/soundtrack/08 Liturgy of Valor.mp3", weight: 0.5 },
+        { src: "music/soundtrack/09 Alter.mp3", weight: 0.25 },
+        { src: "music/soundtrack/10 Return.mp3", weight: 0.5 },
+        { src: "music/soundtrack/11 Metal and Stone.mp3", weight: 1 },
+        { src: "music/soundtrack/12 Gorgy.mp3", weight: 0.5 },
+        { src: "music/soundtrack/13 The Mourning of Eve (Interlude).mp3", weight: 2 },
+        { src: "music/soundtrack/14 Mother's Lament.mp3", weight: 0.5 },
+        { src: "music/soundtrack/15 River to Light.mp3", weight: 0.5 },
+        { src: "music/soundtrack/16 The Intercessor.mp3", weight: 0.75 },
+        { src: "music/soundtrack/17 Unwelcome Party.mp3", weight: 0.25 },
+        { src: "music/soundtrack/18 River to Light (Interlude).mp3", weight: 1.5 },
+        { src: "music/soundtrack/19 Venite Exultemus.mp3", weight: 0.25 },
+        { src: "music/soundtrack/20 Antiphonary.mp3", weight: 0.5 },
+        { src: "music/soundtrack/21 River to Light (Instrumental).mp3", weight: 0.5 },
+        { src: "music/soundtrack/23 River to Light (Reprise).mp3", weight: 0.5 },
+        { src: "music/soundtrack/24 End Theme.mp3", weight: 0.25 },
       ],
       transitions: [
         { src: "music2_transitions_descending.mp3", weight: 1 },
@@ -2343,14 +2366,15 @@ async function fetchWithFallback(urls, fetchOpts){
     return arr[arr.length-1];
   }
 
+  
   function musicSetSrc(src, loop){
     if(!$bgm) return;
     
     src = resolveAsset("music", src);
-if($bgm && !$bgm.paused){ try{$bgm.pause();}catch(e){} }
-    if($bgm.getAttribute("src") !== src){
-      $bgm.setAttribute("src", src);
-      $bgm.load();
+  if($bgm && !$bgm.paused){ try{$bgm.pause();}catch(e){} }
+  if($bgm.getAttribute("src") !== src){
+        $bgm.setAttribute("src", src);
+        $bgm.load();
     }
     $bgm.loop = !!loop;
   }
@@ -8191,11 +8215,11 @@ const safe = ch === ' ' ? '&nbsp;' : escapeHtml(ch);
     $hud.innerHTML = `
       <span class="hud-item muted"><b>HP</b> ${game.hp}/${game.hpMax}</span>
       <span class="hud-item muted">[P] Heal</span>
-      <span class="hud-item muted"><img class="hud-ico" src="/images/icons/potion_18.png" alt="Potions" title="Potion" /> <b>${potionCount}</b>/<b>${POTION_CAP}</b>${potBits.length ? ` ${potBits.join(' ')}` : ``}</span>
-      <span class="hud-item muted"><img class="hud-ico" src="/images/icons/torch_18.png" alt="Torch" title="Torch" /> <b>${game.inv.torches}</b>/<b>${TORCH_CAP}</b></span>
-      <span class="hud-item muted"><img class="hud-ico" src="/images/icons/${escapeHtml(game.weaponName)==='Bare Hands' ? 'fist_18.png' : 'sword_18.png'}" alt="Weapon" title="Weapon" /> <b>${game.atk}</b> (${escapeHtml(game.weaponName)})</span>
-      <span class="hud-item muted"><img class="hud-ico" src="/images/icons/chest_18.png" alt="Gold" title="Chest" /> <b>${game.gold}</b></span>
-      <span class="hud-item muted"><img class="hud-ico" src="/images/icons/key_18.png" alt="Keys" title="Key" /> <b>${game.inv.keys}</b></span>
+      <span class="hud-item muted"><img class="hud-ico" src="images/icons/potion_18.png" alt="Potions" title="Potion" /> <b>${potionCount}</b>/<b>${POTION_CAP}</b>${potBits.length ? ` ${potBits.join(' ')}` : ``}</span>
+      <span class="hud-item muted"><img class="hud-ico" src="images/icons/torch_18.png" alt="Torch" title="Torch" /> <b>${game.inv.torches}</b>/<b>${TORCH_CAP}</b></span>
+      <span class="hud-item muted"><img class="hud-ico" src="images/icons/${escapeHtml(game.weaponName)==='Bare Hands' ? 'fist_18.png' : 'sword_18.png'}" alt="Weapon" title="Weapon" /> <b>${game.atk}</b> (${escapeHtml(game.weaponName)})</span>
+      <span class="hud-item muted"><img class="hud-ico" src="images/icons/chest_18.png" alt="Gold" title="Chest" /> <b>${game.gold}</b></span>
+      <span class="hud-item muted"><img class="hud-ico" src="images/icons/key_18.png" alt="Keys" title="Key" /> <b>${game.inv.keys}</b></span>
       <span class="hud-item muted">Lvl <b>${depthStr}</b></span>
 
       ${DEBUG ? `
