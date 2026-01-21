@@ -862,17 +862,17 @@ const DEFAULT_HEAL_POTIONS = 3; // starting healing potions (non-debug)
 
 const ENT = {
     // PLAYER GLYPH: ✥ (sigil)
-
     PLAYER: '✥',
+    // POTION GLYPHS
     POTION: '!',
     CHEST: '$',
     WEAPON: 'ƪ',
     TRAP: '^',
     TRADER: 'T',
     TORCH: 't',
-
     SHRINE: '¥',
     ALTAR: 'Ш',
+    // ENEMY GLYPHS
     GOBLIN: 'g',
     ORC: 'o',
     SNAKE: '~',
@@ -888,7 +888,11 @@ const ENT = {
     WYRM: 'Ϡ',
     WYRM_ELDER: 'ѯ',
     SKELETON: '§',
-     HORROR: 'Ɵ'
+    HORROR: 'Ɵ',
+    // TITAN GLYPHS
+    MOUNTAIN: '█',
+    MOUNTAIN_SHARD_A: '▀',
+    MOUNTAIN_SHARD_B: '▄'
   };
 
   // --- Chest glyph replacement (graphic) ---
@@ -1061,16 +1065,17 @@ const ENT = {
     [ENT.CRAWLER]: '#ffb347',
     [ENT.WALKER]: '#f5f5f5',
     [ENT.WRAITH]: '#bbaaff',
-
     [ENT.CYCLOPS]: '#d9c6a5',
     [ENT.CYCLOPS_CHIEF]: '#f2d35e',
     [ENT.SPIDER]: '#9ad1a1',
     [ENT.SPIDER_QUEEN]: '#d7ffb0',
     [ENT.WYRM]: '#7fb6ff',
     [ENT.WYRM_ELDER]: '#c8f0ff',
-     [ENT.SKELETON]: '#e7e7e7',
-     [ENT.HORROR]: COL.boss,
-  
+    [ENT.SKELETON]: '#e7e7e7',
+    [ENT.HORROR]: COL.boss,
+    [ENT.MOUNTAIN]: COL.boss,
+    [ENT.MOUNTAIN_SHARD_A]: '#d9c6a5',
+    [ENT.MOUNTAIN_SHARD_B]: '#d9c6a5',
      ['╬']: '#cfd8dc',
      ['^']: '#b0bec5'
   };
@@ -1108,32 +1113,24 @@ const ENT = {
     { glyph: TILE.BRIDGE_L, name: "Bridge Anchor", color: COL.wall },
     { glyph: TILE.BRIDGE_SPAN, name: "Bridge", color: COL.corr },
     { glyph: TILE.BRIDGE_R, name: "Bridge Anchor", color: COL.wall },
-
     { glyph: TILE.DOOR_C, name: "Door", color: COL.door },
     { glyph: TILE.DOOR_O, name: "Open", color: COL.door },
     { glyph: TILE.LDOOR_C, name: "Locked", color: COL.locked },
-
     { glyph: ENT.TORCH, name: "Torch", color: COL.torch },
-
     { glyph: ENT.SHRINE, name: "Vitality Shrine", color: COL.shrine },
-
     { glyph: TILE.SD_C, name: "Secret", color: COL.sdoor },
     { glyph: TILE.SD_O, name: "Open", color: COL.sdoor },
     { glyph: TILE.DOWN, name: "Down", color: COL.stairs },
     { glyph: TILE.SDOWN, name: "Skip", color: COL.shortcut },
-
     { glyph: ENT.TRADER, name: "Trader", color: COL.trader },
-
     { glyph: ENT.POTION, name: "Heal (purple)", color: POTION_COLOR[POTION.HEAL] },
     { glyph: ENT.POTION, name: "Poison (green)", color: POTION_COLOR[POTION.POISON] },
     { glyph: ENT.POTION, name: "Invis (grey)", color: POTION_COLOR[POTION.INVIS] },
     { glyph: ENT.POTION, name: "Trans (ochre)", color: POTION_COLOR[POTION.TRANSMUTE] },
     { glyph: ENT.POTION, name: "Invinc (red)", color: POTION_COLOR[POTION.INVINC] },
-
     { glyph: ENT.CHEST, name: "Chest", color: COL.chest },
     { glyph: ENT.WEAPON, name: "Weapon", color: COL.weapon },
     { glyph: ENT.TRAP, name: "Trap", color: COL.trap },
-
     { glyph: ENT.GOBLIN, name: "Goblin", color: MONSTER_COLOR[ENT.GOBLIN] },
     { glyph: ENT.ORC, name: "Orc", color: MONSTER_COLOR[ENT.ORC] },
     { glyph: ENT.SNAKE, name: "Snake", color: MONSTER_COLOR[ENT.SNAKE] },
@@ -1149,7 +1146,9 @@ const ENT = {
     { glyph: ENT.WYRM, name: "Wyrm Minion", color: MONSTER_COLOR[ENT.WYRM] },
     { glyph: ENT.WYRM_ELDER, name: "Elder Wyrm", color: MONSTER_COLOR[ENT.WYRM_ELDER] },
     { glyph: ENT.SKELETON, name: "Skeleton Pack", color: MONSTER_COLOR[ENT.SKELETON] },
-    { glyph: ENT.HORROR, name: "Horror", color: MONSTER_COLOR[ENT.HORROR] }
+    { glyph: ENT.HORROR, name: "Horror", color: MONSTER_COLOR[ENT.HORROR] },
+    { glyph: ENT.MOUNTAIN, name: "Mountain", color: MONSTER_COLOR[ENT.MOUNTAIN] },
+    { glyph: ENT.MOUNTAIN_SHARD_A, name: "Mountain Shard", color: MONSTER_COLOR[ENT.MOUNTAIN_SHARD_A] }
   ];
 
   const LEGEND_NOTE = `
@@ -4081,6 +4080,85 @@ function currentVisionRadius(){
     };
   }
 
+
+// ---------- MOUNTAIN (Titan) ----------
+// Mountain + shards fight like normal monsters (generic AI/combat).
+// Spawn-only feature: avoids new engine/render paths.
+function makeMountainBossForDepth(d, mode){
+  if(mode === "UNKILLABLE"){
+    return { glyph: ENT.MOUNTAIN, name: "Mountain", hp: 9999, atk: 99 };
+  }
+  // default / DEFEATABLE
+  const hp = randInt(24, 34) + Math.floor(d/2);
+  const atk = randInt(6, 10) + Math.floor(d/10);
+  return { glyph: ENT.MOUNTAIN, name: "Mountain", hp, atk };
+}
+
+function makeMountainShardForDepth(d, mode){
+  const glyph = (Math.random() < 0.5) ? ENT.MOUNTAIN_SHARD_A : ENT.MOUNTAIN_SHARD_B;
+
+  if(mode === "UNKILLABLE"){
+    return { glyph, name: "Angry Shard", hp: 9999, atk: 40 };
+  }
+  // default / DEFEATABLE
+  const hp = randInt(14, 22) + Math.floor(d/4);
+  const atk = randInt(4, 8) + Math.floor(d/12);
+  return { glyph, name: "Angry Shard", hp, atk };
+}
+
+function __findOpenNear_MTN(lvl, tiles, isNormal, forbidOnTrader, monsters, cx, cy, maxR){
+  for(let r=1; r<=maxR; r++){
+    for(let dy=-r; dy<=r; dy++){
+      for(let dx=-r; dx<=r; dx++){
+        const x = cx + dx, y = cy + dy;
+        if(x<2||y<2||x>=MAP_W-2||y>=MAP_H-2) continue;
+        if(!isNormal(x,y)) continue;
+        if(forbidOnTrader(x,y)) continue;
+        const t = tiles[x][y];
+        if(!(t===TILE.FLOOR || t===TILE.CORR)) continue;
+        if(t===TILE.DOWN || t===TILE.SDOWN) continue;
+        if(t===TILE.DOOR_C || t===TILE.DOOR_O || t===TILE.LDOOR_C) continue;
+        const k = keyXY(x,y);
+        if(monsters.has(k) || (lvl.traders && lvl.traders.has(k))) continue;
+        return {x,y};
+      }
+    }
+  }
+  return null;
+}
+
+// Spawns a Mountain "horde" but keeps only one █. Extra "boss slots" become shards.
+function spawnMountainHorde(lvl, depth, monsters, tiles, isNormal, forbidOnTrader, startPos, downPos, desiredBossCount, mode){
+  const nBoss = Math.max(1, desiredBossCount|0);
+
+  // Always anchor to descent; if downPos is missing, do not spawn Mountain.
+  if(!downPos) return 0;
+
+  // Always place near the descent room (helps encounter readability).
+  // Progressive radii avoids failure if the descent room is occupied (e.g., Intercessor).
+  let bossPos =
+    __findOpenNear_MTN(lvl, tiles, isNormal, forbidOnTrader, monsters, downPos.x, downPos.y, 3) ||
+    __findOpenNear_MTN(lvl, tiles, isNormal, forbidOnTrader, monsters, downPos.x, downPos.y, 6) ||
+    __findOpenNear_MTN(lvl, tiles, isNormal, forbidOnTrader, monsters, downPos.x, downPos.y, 10);
+
+  if(!bossPos) return 0;
+
+  monsters.set(keyXY(bossPos.x, bossPos.y), makeMountainBossForDepth(depth, mode));
+
+  let spawned = 1;
+  const shardCount = Math.max(0, nBoss - 1);
+  for(let i=0; i<shardCount; i++){
+    const p =
+      __findOpenNear_MTN(lvl, tiles, isNormal, forbidOnTrader, monsters, bossPos.x, bossPos.y, 2) ||
+      __findOpenNear_MTN(lvl, tiles, isNormal, forbidOnTrader, monsters, bossPos.x, bossPos.y, 4) ||
+      __findOpenNear_MTN(lvl, tiles, isNormal, forbidOnTrader, monsters, bossPos.x, bossPos.y, 7);
+    if(!p) break;
+    monsters.set(keyXY(p.x,p.y), makeMountainShardForDepth(depth, mode));
+    spawned++;
+  }
+  return spawned;
+}
+
 // ---------- SKELETON PACKS ----------
 let SKELETON_PACK_ID = 1;
 
@@ -5945,8 +6023,21 @@ chooseBlackoutRooms(lvl, rooms, depth, startPos, downPos);
     // Place key chests AFTER doors exist (so it knows exact needed key count)
     placeKeyChests(lvl, depth);
 
-    // Boss on 20
-    if(depth === 20){
+    // Mountain (Titan) encounter:
+    // - DEBUG harness: depth 1 (quick validation)
+    // - Normal play: depth 10 mid-boss
+    if(window.DEBUG && depth === 1){
+      spawnMountainHorde(lvl, depth, monsters, tiles, isNormal, forbidOnTrader, startPos, downPos, randInt(2,4), "UNKILLABLE");
+    }
+    if(depth === 10){
+      spawnMountainHorde(lvl, depth, monsters, tiles, isNormal, forbidOnTrader, startPos, downPos, randInt(2,4), "UNKILLABLE");
+    }
+    if (depth === 20) {
+      spawnMountainHorde(lvl, depth, monsters, tiles, isNormal, forbidOnTrader, startPos, downPos, randInt(2,4), "DEFEATABLE");
+    }
+
+    // Boss on 20th level: Deep Horror
+    if(depth === 20){      
       for(let tries=0; tries<9000; tries++){
         const x = randInt(2, MAP_W-3);
         const y = randInt(2, MAP_H-3);
@@ -5958,6 +6049,7 @@ chooseBlackoutRooms(lvl, rooms, depth, startPos, downPos);
         monsters.set(k, { glyph: ENT.HORROR, hp: 34, atk: 9, name: "Deep Horror" });
         break;
       }
+
     }
 
     
