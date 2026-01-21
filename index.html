@@ -2227,6 +2227,186 @@ async function fetchWithFallback(urls, fetchOpts){
     }
   };
 
+  // ---------- MUSIC EXPANSION PATCH (sprinkle in unused soundtrack files) ----------
+  // Goal: Any MP3s that exist in ./music/ but were previously not referenced should become reachable
+  // through existing pool mechanics (roam/ritual/transitions) and via the Skip button.
+  // This patch is additive-only and safe to remove later.
+
+  (function wireAdditionalMusicClips(){
+    if(typeof Music !== "object" || !Music.pools) return;
+
+    function ensurePool(name){
+      if(!Music.pools[name]) Music.pools[name] = [];
+      return Music.pools[name];
+    }
+    function hasSrc(arr, src){
+      return Array.isArray(arr) && arr.some(it => it && it.src === src);
+    }
+    function addToPool(name, src, weight){
+      const pool = ensurePool(name);
+      if(!hasSrc(pool, src)){
+        pool.push({ src, weight: (typeof weight === "number" ? weight : 1) });
+      }
+    }
+    function addToSkip(src){
+      try{
+        if(typeof SKIP_PLAYLIST !== "undefined" && Array.isArray(SKIP_PLAYLIST)){
+          if(!SKIP_PLAYLIST.includes(src)) SKIP_PLAYLIST.push(src);
+        }
+      }catch(_){}
+    }
+    function addToSkipBase(srcOrPath){
+      try{
+        const base = (srcOrPath || "").toString().split("/").pop();
+        if(base) addToSkip(base);
+      }catch(_){}
+    }
+
+
+
+    // --- Calm / lore / exploration interludes (sprinkled lightly into roam) ---
+    const interludes = [
+      "music_elvenseer_interlude_men_choir1.mp3",
+      "music_elvenseer_morning_of_eve1.mp3",
+      "music_elvenseer_morning_of_eve2.mp3",
+      "music_elvenseer_morning_of_eve3.mp3",
+      "music_elvenseer_female_hum1.mp3",
+      "music_river_to_light_reprise_short.mp3",
+      "music_river_to_light_reprise_short2.mp3",
+      "music_ILQUA_VANDA.mp3",
+      "music_medium.mp3"
+    ];
+    for(const src of interludes){
+      // keep rare so the "core" DD vibe still dominates
+      addToPool("roam", src, 0.35);
+      addToSkip(src);
+    }
+
+    // --- Transition variants ---
+    addToPool("transitions", "music_transitions6.mp3", 0.75);
+    addToSkip("music_transitions6.mp3");
+
+    // --- End / long-form variants ---
+    // There is no dedicated "end" trigger in this build; we wire these as rare roam picks + skipable.
+    const endings = [
+      "music_end_theme_whole_song.mp3",
+      "music_end_theme1extend0.mp3",
+      "music_end_theme1extend1.mp3",
+      "music_end_theme1extend3.mp3",
+      "music_end_theme1extend4bridge.mp3"
+    ];
+    for(const src of endings){
+      addToPool("roam", src, 0.12); // ultra-rare
+      addToSkip(src);
+    }
+  
+    // --- FULL SOUNDTRACK (./music/soundtrack) wiring ---
+    // These files live in ./music/soundtrack/. We wire them into existing pools conservatively,
+    // and always add them to Skip (by basename) so you can reach them on demand.
+    const __soundtrack = [
+      "01 Dungeons Deep.mp3",
+      "02 Adventuring.mp3",
+      "03 Miserere.mp3",
+      "04 The Mourning of Eve.mp3",
+      "05 Don't Sleep.mp3",
+      "06 Dungeon March.mp3",
+      "07 Ilqua Vanda.mp3",
+      "08 Liturgy of Valor.mp3",
+      "09 Alter.mp3",
+      "10 Return.mp3",
+      "11 Metal and Stone.mp3",
+      "12 Gorgy.mp3",
+      "13 The Mourning of Eve (Interlude).mp3",
+      "14 Mother's Lament.mp3",
+      "15 River to Light.mp3",
+      "16 The Intercessor.mp3",
+      "17 Unwelcome Party.mp3",
+      "18 River to Light (Interlude).mp3",
+      "19 Venite Exultemus.mp3",
+      "20 Antiphonary.mp3",
+      "21 River to Light (Instrumental).mp3",
+      "22 Elvenseer.mp3",
+      "23 River to Light (Reprise).mp3",
+      "24 End Theme.mp3",
+    ];
+    for(const f of __soundtrack){
+      const full = "./music/soundtrack/" + f;
+      // Roam gets everything (low weight so DD core set still dominates).
+      addToPool("roam", full, 0.18);
+      addToSkipBase(full);
+    }
+    // active accents
+    {
+      const picks = [
+        "05 Don't Sleep.mp3",
+        "06 Dungeon March.mp3",
+        "11 Metal and Stone.mp3",
+        "12 Gorgy.mp3",
+        "17 Unwelcome Party.mp3",
+      ];
+      for(const f of picks){
+        const full = "./music/soundtrack/" + f;
+        addToPool("active", full, 0.35);
+        addToSkipBase(full);
+      }
+    }
+    // transitions accents
+    {
+      const picks = [
+        "10 Return.mp3",
+        "23 River to Light (Reprise).mp3",
+      ];
+      for(const f of picks){
+        const full = "./music/soundtrack/" + f;
+        addToPool("transitions", full, 0.28);
+        addToSkipBase(full);
+      }
+    }
+    // interludes accents
+    {
+      const picks = [
+        "03 Miserere.mp3",
+        "04 The Mourning of Eve.mp3",
+        "07 Ilqua Vanda.mp3",
+        "13 The Mourning of Eve (Interlude).mp3",
+        "14 Mother's Lament.mp3",
+        "18 River to Light (Interlude).mp3",
+      ];
+      for(const f of picks){
+        const full = "./music/soundtrack/" + f;
+        addToPool("interludes", full, 0.3);
+        addToSkipBase(full);
+      }
+    }
+    // medium accents
+    {
+      const picks = [
+        "08 Liturgy of Valor.mp3",
+        "09 Alter.mp3",
+        "16 The Intercessor.mp3",
+        "19 Venite Exultemus.mp3",
+        "20 Antiphonary.mp3",
+      ];
+      for(const f of picks){
+        const full = "./music/soundtrack/" + f;
+        addToPool("medium", full, 0.3);
+        addToSkipBase(full);
+      }
+    }
+    // end accents
+    {
+      const picks = [
+        "24 End Theme.mp3",
+      ];
+      for(const f of picks){
+        const full = "./music/soundtrack/" + f;
+        addToPool("end", full, 0.8);
+        addToSkipBase(full);
+      }
+    }
+})();
+  // ---------- /MUSIC EXPANSION PATCH ----------
+
   function musicAllTracks(){
     const seen = new Set();
     const out = [];
