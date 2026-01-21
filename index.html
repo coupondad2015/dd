@@ -671,7 +671,7 @@ button{
   </div>
 </div>
 
-  <audio id="bgm" src="music/dungeons deep.mp3" preload="auto"></audio>
+<audio id="bgm" src="music/dungeons deep.mp3" preload="auto"></audio>
 
 <script>
   let __visualLoopStarted = false;
@@ -2571,6 +2571,40 @@ try{ $bgm.pause(); }catch(e){}
     musicTransitionTo(Music.base.src, true);
   }
 
+  function resumeFallback(){
+    if(!$bgm) return;
+
+    // Prefer roam pool, but NEVER pick the base theme as fallback.
+    const pool = (Music.pools && Music.pools.roam) ? Music.pools.roam : [];
+    let pickSrc = null;
+
+    if(pool.length){
+      // Try a few times to avoid landing on base theme
+      for(let i = 0; i < 12; i++){
+        const p = weightedPick(pool);
+        const s = p && p.src;
+        if(s && s !== (Music.base && Music.base.src)){
+          pickSrc = s;
+          break;
+        }
+      }
+      // If everything is base (or bad), fall back to the first non-base we can find
+      if(!pickSrc){
+        const alt = pool.find(it => it && it.src && it.src !== (Music.base && Music.base.src));
+        pickSrc = alt ? alt.src : null;
+      }
+    }
+
+    if(pickSrc){
+      Music.state.mode = "clip"; // treated like a normal clip/track
+      playClip(pickSrc);
+      return;
+    }
+
+    // Absolute last resort: if no roam pool exists, keep old behavior
+    resumeBase();
+  }
+
 
   // ----------------- CAVE MUSIC (enter sting + loop + restore) -----------------
   function musicSaveCurrent(){
@@ -2590,7 +2624,7 @@ try{ $bgm.pause(); }catch(e){}
     const s = Music.state.saved;
     if(!s || !s.src){
       // fallback
-      resumeBase();
+      resumeFallback(); //resumeBase();
       return;
     }
 
@@ -2805,7 +2839,7 @@ function musicMaybeTrigger(triggerName, allowQueue=false){
 
     // If a situational clip ended, return to base loop
     if(Music.state.mode === "clip"){
-      resumeBase();
+      resumeFallback(); //resumeBase();
       return;
     }
 
