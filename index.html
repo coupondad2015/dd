@@ -7271,8 +7271,8 @@ function roomPassableInteriorCount(lvl, r){
     // --- Mountain anti-spam nudge (player-driven) ---
     if(isMountainBossGlyph(m.glyph)){
     const dist = Math.max(
-        Math.abs(p.x - m.x),
-        Math.abs(p.y - m.y)
+        Math.abs(_p.x - m.x),
+        Math.abs(_p.y - m.y)
     );
 
     if(dist !== 1){
@@ -7286,10 +7286,6 @@ function roomPassableInteriorCount(lvl, r){
         tryMountainNudge(m, lvl, next);
         }
     }
-    }
-
-    if(isMountainBossGlyph(m.glyph) && m.__hitCount % 5 === 0){
-        tryMountainNudge(m, lvl, next);
     }
 
     logMsg(`Hit ${m.name} for ${dmg}.`);
