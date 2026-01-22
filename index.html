@@ -681,6 +681,10 @@ button{
   try{
     const qp = new URLSearchParams(location.search);
     if(qp.get("debug")==="1") window.DEBUG = true;
+    // Optional Mountain harness via URL: ?mtn=trial or ?mtn=final
+    const mtn = (qp.get("mtn")||"").toLowerCase();
+    if(mtn === "trial") window.DEBUG_MOUNTAIN_MODE = "TRIAL";
+    if(mtn === "final") window.DEBUG_MOUNTAIN_MODE = "FINAL";
   }catch(e){}
   window.addEventListener("keydown", (e)=>{
     if(e.key === "F2"){
@@ -701,8 +705,32 @@ button{
   // ============================================================
 
   // ---------- CONFIG ----------
-  let DEBUG = false; 
-  window.DEBUG = DEBUG;
+  if(typeof window.DEBUG !== "boolean") {
+    window.DEBUG = false;
+  }
+
+
+
+  // DEBUG Mountain test harness:
+  // In real play: Mountain appears on depth 10 (TRIAL) and depth 20 (FINAL).
+  // In debug: you can force a level-1 Mountain encounter that mimics either:
+  //   window.DEBUG_MOUNTAIN_MODE = "TRIAL"  // level-10 behavior
+  //   window.DEBUG_MOUNTAIN_MODE = "FINAL"  // level-20 behavior
+  // Set to null for normal behavior.
+  if(typeof window.DEBUG_MOUNTAIN_MODE !== "string") window.DEBUG_MOUNTAIN_MODE = null;
+  // Convenience: if DEBUG is on and no harness mode was specified, default level-1 harness to TRIAL.
+  if(window.DEBUG && window.DEBUG_MOUNTAIN_MODE === null) window.DEBUG_MOUNTAIN_MODE = "TRIAL";
+
+  function getMountainMode(depth){
+    // Debug harness: depth 1 can impersonate TRIAL or FINAL.
+    if(window.DEBUG && depth === 1 && (window.DEBUG_MOUNTAIN_MODE === "TRIAL" || window.DEBUG_MOUNTAIN_MODE === "FINAL")){
+      return window.DEBUG_MOUNTAIN_MODE;
+    }
+    // Real game
+    if(depth === 10) return "TRIAL";
+    if(depth === 20) return "FINAL";
+    return null;
+  }
 
   const MAP_W = 80;
   const DUNGEON_H = 28;
@@ -1075,6 +1103,9 @@ const ENT = {
     [ENT.SKELETON]: '#e7e7e7',
     [ENT.HORROR]: COL.boss,
     [ENT.MOUNTAIN]: COL.boss,
+    ['▓']: '#ffb8a1',
+    ['▒']: '#ffd4c7',
+    ['░']: '#fff0ea',
     [ENT.MOUNTAIN_SHARD_A]: '#d9c6a5',
     [ENT.MOUNTAIN_SHARD_B]: '#d9c6a5',
      ['╬']: '#cfd8dc',
@@ -2899,14 +2930,15 @@ setMuted(uiMuted);
   const SFX_MASTER = 0.55; // global SFX loudness (0..1)
 
   const SFX_DEFS = {
-    step:    { src: "sfx_step.wav",        vol: 0.35 },
-    bump:    { src: "sfx_wall_bump.wav",   vol: 0.55 },
-    pickup:  { src: "sfx_pickup.wav",      vol: 0.55 },
-    drink:   { src: "sfx_drink.wav",       vol: 0.50 },
-    attack:  { src: "sfx_attack.wav",      vol: 0.60 },
-    damage:  { src: "sfx_damage.wav",      vol: 0.70 },
-    descend: { src: "sfx_descend.wav",     vol: 0.60 },
-    wait:    { src: "sfx_wait.wav",        vol: 0.30 }
+    step:     { src: "sfx_step.wav",                 vol: 0.35 },
+    bump:     { src: "sfx_wall_bump.wav",            vol: 0.55 },
+    pickup:   { src: "sfx_pickup.wav",               vol: 0.55 },
+    drink:    { src: "sfx_drink.wav",                vol: 0.50 },
+    attack:   { src: "sfx_attack.wav",               vol: 0.60 },
+    damage:   { src: "sfx_damage.wav",               vol: 0.70 },
+    descend:  { src: "sfx_descend.wav",              vol: 0.60 },
+    wait:     { src: "sfx_wait.wav",                 vol: 0.30 },
+    mtn_fall: { src: "sfx_boss_mountain_death.wav",  vol: 1.00 }
   };
 
   let sfxCtx = null;
@@ -2945,6 +2977,23 @@ setMuted(uiMuted);
 
   function playSfx(name){
     if(uiMuted) return;
+
+    // file:// fallback: fetch/decodeAudioData is blocked by CORS on opaque origin "null"
+    // Use HTMLAudioElement which can load file:// assets (like your bgm does).
+    if(location.protocol === "file:"){
+      const def = SFX_DEFS[name];
+      if(!def) return;
+      try{
+        const a = new Audio(resolveAsset("sfx", def.src));
+        const vol = (def?.vol ?? 0.5);
+        a.volume = Math.max(0, Math.min(1, vol * SFX_MASTER));
+        // Don’t throw if autoplay is blocked; user gesture will satisfy it anyway.
+        a.play().catch(()=>{});
+      }catch(_){}
+      return;
+    }
+
+    // WebAudio path (Vercel / http(s))
     if(!sfxReady || !sfxCtx) return;
     const buf = sfxBuffers[name];
     if(!buf) return;
@@ -4087,19 +4136,20 @@ function currentVisionRadius(){
 // Spawn-only feature: avoids new engine/render paths.
 function makeMountainBossForDepth(d, mode){
   if(mode === "UNKILLABLE"){
-    return { glyph: ENT.MOUNTAIN, name: "Mountain", hp: 9999, atk: 99 };
+    // Trial mode: effectively unkillable (no progress).
+    return { glyph: ENT.MOUNTAIN, name: "Mountain", hp: 9999, maxHp: 9999, atk: 8, __mtnPhase: 0 };
   }
-  // default / DEFEATABLE
+  // default / DEFEATABLE (final fight)
   const hp = randInt(24, 34) + Math.floor(d/2);
   const atk = randInt(6, 10) + Math.floor(d/10);
-  return { glyph: ENT.MOUNTAIN, name: "Mountain", hp, atk };
+  return { glyph: ENT.MOUNTAIN, name: "Mountain", hp, maxHp: hp, atk, __mtnPhase: 0 };
 }
 
 function makeMountainShardForDepth(d, mode){
   const glyph = (Math.random() < 0.5) ? ENT.MOUNTAIN_SHARD_A : ENT.MOUNTAIN_SHARD_B;
 
   if(mode === "UNKILLABLE"){
-    return { glyph, name: "Angry Shard", hp: 9999, atk: 40 };
+    return { glyph, name: "Angry Shard", hp: 9999, atk: 5 };
   }
   // default / DEFEATABLE
   const hp = randInt(14, 22) + Math.floor(d/4);
@@ -4158,6 +4208,72 @@ function spawnMountainHorde(lvl, depth, monsters, tiles, isNormal, forbidOnTrade
     spawned++;
   }
   return spawned;
+}
+
+
+// --- Mountain encounter helpers (no renderer changes) ---
+const MTN_GLYPH_INTACT = ENT.MOUNTAIN; // █
+const MTN_GLYPH_FRACTURED = '▓';
+const MTN_GLYPH_CRACKING  = '▒';
+const MTN_GLYPH_FAILING   = '░';
+
+function isMountainLikeGlyph(g){
+  return g === ENT.MOUNTAIN || g === ENT.MOUNTAIN_SHARD_A || g === ENT.MOUNTAIN_SHARD_B ||
+         g === MTN_GLYPH_FRACTURED || g === MTN_GLYPH_CRACKING || g === MTN_GLYPH_FAILING;
+}
+function isMountainShardGlyph(g){
+  return g === ENT.MOUNTAIN_SHARD_A || g === ENT.MOUNTAIN_SHARD_B;
+}
+function isMountainBossGlyph(g){
+  return g === ENT.MOUNTAIN || g === MTN_GLYPH_FRACTURED || g === MTN_GLYPH_CRACKING || g === MTN_GLYPH_FAILING;
+}
+
+function purgeMountainEntities(monsterMap){
+  // Remove Mountain and its shards from a Map<key,monster>
+  for(const [k,m] of monsterMap.entries()){
+    if(m && (isMountainBossGlyph(m.glyph) || isMountainShardGlyph(m.glyph))){
+      monsterMap.delete(k);
+    }
+  }
+}
+
+// Trial messaging state lives on lvl.__mtnTrial (ephemeral; no save format changes)
+function getTrialState(lvl){
+  if(!lvl.__mtnTrial) lvl.__mtnTrial = { hits: 0, warned: 0, completed: false };
+  return lvl.__mtnTrial;
+}
+
+function maybeLogTrialWarning(lvl){
+  const st = getTrialState(lvl);
+  if(st.completed) return;
+  st.hits++;
+  if(st.hits === 1){
+    logMsg("The stone does not yield. You will be tested again.", "lore");
+  }else if(st.hits === 2 || st.hits === 3){
+    logMsg("The stone does not yield.", "lore");
+  }
+  // After that: silence (the flat hit line carries the implication)
+}
+
+function updateMountainFinalPhaseAndMaybeMsg(m){
+  if(!m || !isMountainBossGlyph(m.glyph)) return null;
+  const maxHp = (m.maxHp || m.hp || 1);
+  const pct = (m.hp <= 0) ? 0 : (m.hp / maxHp);
+
+  // Phase thresholds: 0 intact, 1 fractured, 2 cracking, 3 failing
+  let phase = 0;
+  if(pct <= 0.25) phase = 3;
+  else if(pct <= 0.50) phase = 2;
+  else if(pct <= 0.75) phase = 1;
+
+  const prev = (typeof m.__mtnPhase === "number") ? m.__mtnPhase : 0;
+  if(phase <= prev) return null;
+
+  m.__mtnPhase = phase;
+  if(phase === 1) { m.glyph = MTN_GLYPH_FRACTURED; return "Fissures appear."; }
+  if(phase === 2) { m.glyph = MTN_GLYPH_CRACKING;  return "Stone cracks."; }
+  if(phase === 3) { m.glyph = MTN_GLYPH_FAILING;   return "The Mountain buckles."; }
+  return null;
 }
 
 // ---------- SKELETON PACKS ----------
@@ -6025,16 +6141,13 @@ chooseBlackoutRooms(lvl, rooms, depth, startPos, downPos);
     placeKeyChests(lvl, depth);
 
     // Mountain (Titan) encounter:
-    // - DEBUG harness: depth 1 (quick validation)
-    // - Normal play: depth 10 mid-boss
-    if(window.DEBUG && depth === 1){
-      spawnMountainHorde(lvl, depth, monsters, tiles, isNormal, forbidOnTrader, startPos, downPos, randInt(2,4), "UNKILLABLE");
-    }
-    if(depth === 10){
-      spawnMountainHorde(lvl, depth, monsters, tiles, isNormal, forbidOnTrader, startPos, downPos, randInt(2,4), "UNKILLABLE");
-    }
-    if (depth === 20) {
-      spawnMountainHorde(lvl, depth, monsters, tiles, isNormal, forbidOnTrader, startPos, downPos, randInt(2,4), "DEFEATABLE");
+    // Real play: depth 10 = TRIAL, depth 20 = FINAL
+    // Debug harness: depth 1 can impersonate TRIAL or FINAL via window.DEBUG_MOUNTAIN_MODE
+    const __mMode = getMountainMode(depth);
+    if(__mMode){
+      lvl.__mtnMode = __mMode;
+      const __spawnMode = (__mMode === "TRIAL") ? "UNKILLABLE" : "DEFEATABLE";
+      spawnMountainHorde(lvl, depth, monsters, tiles, isNormal, forbidOnTrader, startPos, downPos, randInt(2,4), __spawnMode);
     }
 
     // Boss on 20th level: Deep Horror
@@ -7103,13 +7216,31 @@ function roomPassableInteriorCount(lvl, r){
     const __enc = touchCorpseEncounter(lvl);
     const k = keyXY(mx,my);
     const m = lvl.monsters.get(k);
+    const __mMode = getMountainMode(game.depth);
+    // Mountain TRIAL: no progress; hits only teach.
+    if(m && __mMode === "TRIAL" && (isMountainBossGlyph(m.glyph) || isMountainShardGlyph(m.glyph))){
+      maybeLogTrialWarning(lvl);
+      logMsg(isMountainBossGlyph(m.glyph) ? "You hit Mountain." : "You hit a shard.");
+      return;
+    }
     let dmg = randInt(1, game.atk);
     if(!game.weaponEquipped){
       dmg = Math.max(1, Math.floor(dmg/2));
     }
     m.hp -= dmg;
     logMsg(`Hit ${m.name} for ${dmg}.`);
+    if(__mMode === "FINAL" && m && isMountainBossGlyph(m.glyph) && m.hp > 0){
+      const __phaseMsg = updateMountainFinalPhaseAndMaybeMsg(m);
+      if(__phaseMsg) logMsg(__phaseMsg, "lore");
+    }
     if(m.hp <= 0){
+      if(__mMode === "FINAL" && m && isMountainBossGlyph(m.glyph)){
+        // Final payoff: ceremonial treasure.
+        try{ game.gold += 1000; }catch(_){ }
+        logMsg("The Mountain falls.", "lore");
+        logMsg("You gain +1000 gold.");
+        playSfx("mtn_fall");
+      }
       // Visual-only death dissolve (one tile). We delete the monster immediately,
       // but the animation stores glyph+color so it can render independently.
       const __deathColor = (m && m.chaos) ? (COL.chaosRelic || "#c77dff") : ((m && m.color) ? m.color : ((typeof MONSTER_COLOR !== "undefined" && MONSTER_COLOR[m.glyph]) ? MONSTER_COLOR[m.glyph] : (COL?.monster || "#ff6b6b")));
@@ -7191,6 +7322,8 @@ function roomPassableInteriorCount(lvl, r){
 
       let bounty = randInt(1,4) + Math.floor(game.depth/4);
       if(m && m.isIntercessor) bounty = bounty * 3; // Intercessor pays out big (2–3x typical)
+      // Arbiter-only payout (ambush boss): fixed ceremonial range
+      if(m && m.isAmbushBoss) bounty = randInt(20, 50);
       game.gold += bounty;
       logMsg(`${m.name} falls. +${bounty} gold.`);
     }
@@ -7199,6 +7332,7 @@ function roomPassableInteriorCount(lvl, r){
   function monstersAct(lvl){
   const p = lvl.player;
   const next = new Map(lvl.monsters);
+  const __mMode = getMountainMode(game.depth);
 
   // Index packs (skeleton herds)
   const leaders = new Map();       // packId -> {k,m,x,y}
@@ -7445,6 +7579,24 @@ if(m && m.guardIntercessor){
       // Bridge combat isolation: bridge separates combat layers (monsters)
       if(isBridgeAny(lvl, x, y) !== isBridgeAny(lvl, p.x, p.y)) continue;
       const dmg = randInt(1, m.atk);
+
+      // Mountain TRIAL: drain to 1 HP, then withdraw (no death).
+      if(__mMode === "TRIAL" && (isMountainBossGlyph(m.glyph) || isMountainShardGlyph(m.glyph)) && !hasInvincible()){
+        const newHp = game.hp - dmg;
+        game.hp = Math.max(1, newHp);
+        playSfx('damage');
+        logMsg(`${m.name} hits for ${dmg}.`);
+        if(game.hp <= 1){
+          // Trial ends: Mountain and shards vanish.
+          try{ getTrialState(lvl).completed = true; }catch(_){}
+          purgeMountainEntities(next);
+          lvl.monsters = next;
+          logMsg("You were warned. The test is not complete.", "lore");
+          return;
+        }
+        continue;
+      }
+
       if(hasInvincible()){
         logMsg(`${m.name} strikes — but it cannot harm you.`);
       } else {
