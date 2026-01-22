@@ -2938,6 +2938,7 @@ setMuted(uiMuted);
     damage:   { src: "sfx_damage.wav",               vol: 0.70 },
     descend:  { src: "sfx_descend.wav",              vol: 0.60 },
     wait:     { src: "sfx_wait.wav",                 vol: 0.30 },
+    mtn_trial:{ src: "sfx_boss_mountain_trial.wav", vol: 1.00 },
     mtn_fall: { src: "sfx_boss_mountain_death.wav",  vol: 1.00 }
   };
 
@@ -4228,6 +4229,32 @@ function isMountainBossGlyph(g){
   return g === ENT.MOUNTAIN || g === MTN_GLYPH_FRACTURED || g === MTN_GLYPH_CRACKING || g === MTN_GLYPH_FAILING;
 }
 
+function tryMountainNudge(m, lvl, monsterMap){
+  const dirs = [
+    {dx:1,dy:0},{dx:-1,dy:0},
+    {dx:0,dy:1},{dx:0,dy:-1}
+  ];
+
+  // light shuffle to avoid bias
+  for(let i=dirs.length-1;i>0;i--){
+    const j = (Math.random()*(i+1))|0;
+    [dirs[i],dirs[j]] = [dirs[j],dirs[i]];
+  }
+
+  for(const d of dirs){
+    const nx = m.x + d.dx;
+    const ny = m.y + d.dy;
+    const nk = keyXY(nx, ny);
+
+    if(canMonsterMoveTo(m, nx, ny)){
+      monsterMap.delete(keyXY(m.x, m.y));
+      m.x = nx; m.y = ny;
+      monsterMap.set(nk, m);
+      return;
+    }
+  }
+}
+
 function purgeMountainEntities(monsterMap){
   // Remove Mountain and its shards from a Map<key,monster>
   for(const [k,m] of monsterMap.entries()){
@@ -4248,12 +4275,14 @@ function maybeLogTrialWarning(lvl){
   if(st.completed) return;
   st.hits++;
   if(st.hits === 1){
+    playSfx("mtn_trial"); // ← ADD THIS LINE
     logMsg("The stone does not yield. You will be tested again.", "lore");
   }else if(st.hits === 2 || st.hits === 3){
     logMsg("The stone does not yield.", "lore");
   }
   // After that: silence (the flat hit line carries the implication)
 }
+
 
 function updateMountainFinalPhaseAndMaybeMsg(m){
   if(!m || !isMountainBossGlyph(m.glyph)) return null;
@@ -7217,17 +7246,52 @@ function roomPassableInteriorCount(lvl, r){
     const k = keyXY(mx,my);
     const m = lvl.monsters.get(k);
     const __mMode = getMountainMode(game.depth);
+    
     // Mountain TRIAL: no progress; hits only teach.
     if(m && __mMode === "TRIAL" && (isMountainBossGlyph(m.glyph) || isMountainShardGlyph(m.glyph))){
       maybeLogTrialWarning(lvl);
       logMsg(isMountainBossGlyph(m.glyph) ? "You hit Mountain." : "You hit a shard.");
+
+      // Allow pressure to build even in TRIAL
+      if(isMountainBossGlyph(m.glyph)){
+        m.__hitCount = (m.__hitCount || 0) + 1;
+        if(m.__hitCount % 5 === 0){
+          tryMountainNudge(m, lvl, next);
+        }
+      }
       return;
     }
+
     let dmg = randInt(1, game.atk);
     if(!game.weaponEquipped){
       dmg = Math.max(1, Math.floor(dmg/2));
     }
     m.hp -= dmg;
+
+    // --- Mountain anti-spam nudge (player-driven) ---
+    if(isMountainBossGlyph(m.glyph)){
+    const dist = Math.max(
+        Math.abs(p.x - m.x),
+        Math.abs(p.y - m.y)
+    );
+
+    if(dist !== 1){
+        // adjacency broken → reset pressure
+        m.__hitCount = 0;
+    } else {
+        m.__hitCount = (m.__hitCount || 0) + 1;
+
+        // Every 5 consecutive adjacent hits, Mountain settles
+        if(m.__hitCount % 5 === 0){
+        tryMountainNudge(m, lvl, next);
+        }
+    }
+    }
+
+    if(isMountainBossGlyph(m.glyph) && m.__hitCount % 5 === 0){
+        tryMountainNudge(m, lvl, next);
+    }
+
     logMsg(`Hit ${m.name} for ${dmg}.`);
     if(__mMode === "FINAL" && m && isMountainBossGlyph(m.glyph) && m.hp > 0){
       const __phaseMsg = updateMountainFinalPhaseAndMaybeMsg(m);
@@ -7575,6 +7639,12 @@ if(m && m.guardIntercessor){
       if(stretch >= 3) continue;
     }
     const dist = Math.max(Math.abs(p.x-x), Math.abs(p.y-y));
+
+    // Mountain TRIAL
+    if(isMountainBossGlyph(m.glyph) && dist > 1){
+        m.__hitCount = 0;
+    }
+
     if(dist === 1){
       // Bridge combat isolation: bridge separates combat layers (monsters)
       if(isBridgeAny(lvl, x, y) !== isBridgeAny(lvl, p.x, p.y)) continue;
