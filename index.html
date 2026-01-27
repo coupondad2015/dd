@@ -680,12 +680,61 @@ button{
   // DEBUG enable: add ?debug=1 to URL (or press F2 to toggle)
   try{
     const qp = new URLSearchParams(location.search);
+
+    // --- Existing harnesses ---
     if(qp.get("debug")==="1") window.DEBUG = true;
-    // Optional Mountain harness via URL: ?mtn=trial or ?mtn=final
+    if(qp.get("safe")==="1") window.SAFE_MODE = true;
+
     const mtn = (qp.get("mtn")||"").toLowerCase();
     if(mtn === "trial") window.DEBUG_MOUNTAIN_MODE = "TRIAL";
     if(mtn === "final") window.DEBUG_MOUNTAIN_MODE = "FINAL";
+
+    const steel = (qp.get("steel")||"").toLowerCase();
+    if(steel === "hunk" || steel === "4") window.DEBUG_STEEL_MODE = "HUNK";
+    if(steel === "bro" || steel === "older" || steel === "brother" || steel === "13") window.DEBUG_STEEL_MODE = "BRO";
+
+    // --- Near-Death TEST HARNESS (query-string only) ---
+    // ?nd=force  -> force on next defeat (any depth)
+    // ?nd=12     -> force on defeat only at depth 12
+    // ?nd=1      -> armed (but not forced unless you add chance)
+    // Optional: &ndOnce=1 -> disable after first trigger
+    const ndRaw = (qp.get("nd") || "").toLowerCase();
+
+    window.TEST_NEAR_DEATH = false;
+    window.TEST_NEAR_DEATH_FORCE = false;
+    window.TEST_NEAR_DEATH_DEPTH = null;
+    window.TEST_NEAR_DEATH_ONCE = (qp.get("ndOnce") === "1");
+
+    if(ndRaw){
+      window.TEST_NEAR_DEATH = true;
+      if(ndRaw === "force") {
+        window.TEST_NEAR_DEATH_FORCE = true;
+      } else if(ndRaw === "1" || ndRaw === "true" || ndRaw === "on") {
+        // armed but not forced
+      } else {
+        const n = parseInt(ndRaw, 10);
+        if(Number.isFinite(n) && n > 0) window.TEST_NEAR_DEATH_DEPTH = n;
+      }
+    }
   }catch(e){}
+
+  function shouldForceNearDeathNow(){
+    if(!window.TEST_NEAR_DEATH) return false;
+    if(window.TEST_NEAR_DEATH_FORCE) return true;
+    if(Number.isFinite(window.TEST_NEAR_DEATH_DEPTH)){
+      return window.game && window.game.depth === window.TEST_NEAR_DEATH_DEPTH;
+    }
+    return false;
+  }
+
+  function consumeNearDeathHarnessIfNeeded(){
+    if(window.TEST_NEAR_DEATH_ONCE){
+      window.TEST_NEAR_DEATH = false;
+      window.TEST_NEAR_DEATH_FORCE = false;
+      window.TEST_NEAR_DEATH_DEPTH = null;
+    }
+  }
+
   window.addEventListener("keydown", (e)=>{
     if(e.key === "F2"){
       e.preventDefault();
@@ -709,6 +758,11 @@ button{
     window.DEBUG = false;
   }
 
+  // ---------- NEAR-DEATH CHANCE (normal play) ----------
+  // Many players will never see Near-Death
+  // Some will see it once and remember it
+  // Almost no one will “expect” it
+  const NEAR_DEATH_CHANCE = 0.05; // 0.02 = 2% chance on defeat (0.00–1.00)
 
 
   // DEBUG Mountain test harness:
@@ -718,8 +772,7 @@ button{
   //   window.DEBUG_MOUNTAIN_MODE = "FINAL"  // level-20 behavior
   // Set to null for normal behavior.
   if(typeof window.DEBUG_MOUNTAIN_MODE !== "string") window.DEBUG_MOUNTAIN_MODE = null;
-  // Convenience: if DEBUG is on and no harness mode was specified, default level-1 harness to TRIAL.
-  if(window.DEBUG && window.DEBUG_MOUNTAIN_MODE === null) window.DEBUG_MOUNTAIN_MODE = "TRIAL";
+  // Debug harness is opt-in via URL (?mtn=trial or ?mtn=final). No default.
 
   function getMountainMode(depth){
     // Debug harness: depth 1 can impersonate TRIAL or FINAL.
@@ -730,6 +783,101 @@ button{
     if(depth === 10) return "TRIAL";
     if(depth === 20) return "FINAL";
     return null;
+  }
+
+  // DEBUG Steel test harness:
+  // In real play: Steel "hunk" appears on depth 4, and its older brother appears on depth 13.
+  // In debug: you can force a level-1 Steel encounter via URL:
+  //   ?debug=1&steel=hunk   (depth-4 behavior)
+  //   ?debug=1&steel=bro    (depth-13 behavior)
+  // Set to null for normal behavior.
+  if(typeof window.DEBUG_STEEL_MODE !== "string") window.DEBUG_STEEL_MODE = null;
+
+  function getSteelMode(depth){
+    // Debug harness: depth 1 can impersonate either steel encounter.
+    if(window.DEBUG && depth === 1 && (window.DEBUG_STEEL_MODE === "HUNK" || window.DEBUG_STEEL_MODE === "BRO")){
+      return window.DEBUG_STEEL_MODE;
+    }
+    // Real game
+    if(depth === 4) return "HUNK";
+    if(depth === 13) return "BRO";
+    return null;
+  }
+
+  // Steel encounter: immobile, low damage, meant as foreshadowing (not a minion swarm).
+  function spawnSteelEncounter(lvl, depth, mode){
+    if(!lvl || !lvl.tiles || !lvl.monsters) return;
+
+    const p = lvl.player || {x:2,y:2};
+    const isBro = (mode === "BRO");
+    const glyph = isBro ? ENT.CUBE : ENT.ORC; // underlying glyphs; renderer swaps to ◉ / ◎
+    const name  = isBro ? "Heap of Metal's Older Brother" : "Heap of Metal With Eyes";
+
+    const hpMax = isBro ? 24 : 12;
+    const atk   = isBro ? 6  : 3;
+
+    // Find a place. In DEBUG depth-1 harness, spawn near the player so it's immediately testable.
+    let bx = null, by = null;
+
+    if(window.DEBUG && depth === 1){
+      // Prefer a reachable/visible tile near the player. We expand a radius ring until we find a free floor/corr.
+      const MIN_R = 2;
+      const MAX_R = 24;
+      for(let r=MIN_R; r<=MAX_R && bx===null; r++){
+        // Sample a bunch of points on the ring (cheap, avoids full scan).
+        for(let tries=0; tries<80 && bx===null; tries++){
+          const dx = randInt(-r, r);
+          const dy = (Math.random()<0.5 ? -1 : 1) * (r - Math.abs(dx));
+          const x = p.x + dx;
+          const y = p.y + dy;
+          if(x<2 || y<2 || x>MAP_W-3 || y>MAP_H-3) continue;
+          const t = lvl.tiles[x][y];
+          if(!(t===TILE.FLOOR || t===TILE.CORR)) continue;
+          const k = keyXY(x,y);
+          if(lvl.monsters.has(k) || lvl.traders?.has(k)) continue;
+          bx = x; by = y;
+        }
+      }
+    }
+
+    // Fallback: pick a random floor/corr tile away from the player.
+    if(bx === null){
+      for(let tries=0; tries<9000 && bx===null; tries++){
+        const x = randInt(2, MAP_W-3);
+        const y = randInt(2, MAP_H-3);
+        const t = lvl.tiles[x][y];
+        if(!(t===TILE.FLOOR || t===TILE.CORR)) continue;
+        if(Math.abs(x-p.x) <= 10 && Math.abs(y-p.y) <= 6) continue; // keep it off the doorstep
+        const k = keyXY(x,y);
+        if(lvl.monsters.has(k) || lvl.traders?.has(k)) continue;
+        bx = x; by = y;
+      }
+    }
+
+    // Last resort: place it a bit to the right of the player, even if that means it may land in a corridor.
+    if(bx===null){ bx = Math.min(MAP_W-3, p.x+8); by = p.y; }
+
+    const m = {
+      name,
+      glyph,
+      hp: hpMax,
+      hpMax,
+      atk,
+      immobile: true,
+      steelKind: mode,
+      steelStage: 0,
+      color: isBro ? "#d6dde7" : "#a9b4c3"
+    };
+    lvl.monsters.set(keyXY(bx,by), m);
+
+    try{ if(window.DEBUG && depth===1) console.log('[STEEL HARNESS]', mode, 'spawned at', bx, by); }catch(e){}
+
+    // One-time intro beat (lore tone; not too meta).
+    if(mode === "HUNK"){
+      logMsg("A crude mass of steel rises from the floor tiles.", "lore");
+    }else{
+      logMsg("Something heavy answers your footsteps.", "lore");
+    }
   }
 
   const MAP_W = 80;
@@ -848,8 +996,8 @@ const DEFAULT_HEAL_POTIONS = 3; // starting healing potions (non-debug)
   if(typeof window.SAFE_MODE !== "boolean") window.SAFE_MODE = false;
 
   function syncModes(){
-    // Hard rule: DEBUG implies SAFE MODE
-    if(window.DEBUG) window.SAFE_MODE = true;
+    // DEBUG and SAFE_MODE are independent. SAFE_MODE is opt-in (e.g., ?safe=1).
+    if(typeof window.SAFE_MODE !== "boolean") window.SAFE_MODE = false;
   }
 
   function applyRenderMode(){
@@ -1109,7 +1257,9 @@ const ENT = {
     [ENT.MOUNTAIN_SHARD_A]: '#d9c6a5',
     [ENT.MOUNTAIN_SHARD_B]: '#d9c6a5',
      ['╬']: '#cfd8dc',
-     ['^']: '#b0bec5'
+     ['^']: '#b0bec5',
+     ['◎']: '#a9b4c3',
+     ['◉']: '#d6dde7'
   };
 
   const POTION_COLOR = {
@@ -1486,7 +1636,25 @@ function renderGlyphCanvas(){
           }
         }catch(_){ __corpseMeta = null; }
 
-        let __skipCell = false;
+        // --- STEEL RENDER OVERRIDE (boss-only, keeps underlying glyphs as o/O) ---
+        // IMPORTANT: render-only, read-only. Use loop indices x/y + viewX/viewY (cell.x/y is not guaranteed).
+        try{
+          const __lvlS = (window.game && typeof getLevel === 'function') ? getLevel(game.depth) : null;
+          if(__lvlS && __lvlS.monsters && __lvlS.monsters.get){
+            const __vx = (typeof viewX !== "undefined" ? viewX : 0);
+            const __vy = (typeof viewY !== "undefined" ? viewY : 0);
+            const __wx2 = __vx + x;
+            const __wy2 = __vy + y;
+            const __mk = keyXY(__wx2, __wy2);
+            const __m2 = __lvlS.monsters.get(__mk) || null;
+            if(__m2 && __m2.steelKind){
+              ch = (__m2.steelKind === "BRO") ? "◉" : "◎";
+              glyphColor = (__m2.color || glyphColor);
+            }
+          }
+        }catch(_){ }
+
+let __skipCell = false
 
         // snap to integer pixel boundaries for crisp text
         const drawX = Math.round(padL + x * charW);
@@ -3090,9 +3258,12 @@ setMuted(uiMuted);
   }
 
   function escapeHtml(s){
-    return s.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+    // Defensive: allow undefined/null without breaking render paths
+    s = (s === null || s === undefined) ? "" : String(s);
+    const out = s.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
     // keep subtle pulses visible even when player is standing still
     if(window.__ambientNeeded){ requestAmbientFrame(); }
+    return out;
   }
 
   function renderLegend(){
@@ -3201,6 +3372,7 @@ function weightedChoice(items, weights){
 
   function newGame(){
     game = {
+      ndUsed: false,
       depth: 1,
       maxDepth: 20,
       hpMax: 18,
@@ -3276,8 +3448,127 @@ logMsg("");
     renderAll(true);
   }
 
-  function endGameLose(){
-    if(game.ended) return;
+  // ---------- NEAR-DEATH (post-defeat continuation) ----------
+function placeNearDeathWeaponDrop(lvl, wpn){
+  if(!lvl || !lvl.items) return;
+  if(!wpn) return;
+  const safeAtk = Number.isFinite(wpn.atk) ? wpn.atk : 3;
+  const safeName = (wpn.name && String(wpn.name).trim()) ? wpn.name : "Recovered Steel";
+  const p = lvl.player;
+  const px = p.x, py = p.y;
+
+  const cands = [];
+  for(let x=2; x<MAP_W-2; x++){
+    for(let y=2; y<MAP_H-2; y++){
+      if(x===px && y===py) continue;
+      if(!tilePassable(lvl, x, y)) continue;
+
+      // Prefer out-of-sight: not currently visible
+      if(lvl.visible && lvl.visible[x] && lvl.visible[x][y]) continue;
+
+      const k = keyXY(x,y);
+      if(lvl.items.has(k)) continue;
+      if(lvl.monsters && lvl.monsters.has(k)) continue;
+      if(lvl.traders && lvl.traders.has(k)) continue;
+
+      const d = Math.max(Math.abs(x-px), Math.abs(y-py));
+      if(d < 4 || d > 14) continue;
+
+      cands.push({x,y});
+    }
+  }
+
+  // Fallback if everything is visible
+  if(cands.length === 0){
+    for(let x=2; x<MAP_W-2; x++){
+      for(let y=2; y<MAP_H-2; y++){
+        if(x===px && y===py) continue;
+        if(!tilePassable(lvl, x, y)) continue;
+        const d = Math.max(Math.abs(x-px), Math.abs(y-py));
+        if(d < 4 || d > 14) continue;
+        const k = keyXY(x,y);
+        if(lvl.items.has(k)) continue;
+        cands.push({x,y});
+      }
+    }
+  }
+
+  if(cands.length === 0) return;
+
+  const pick = cands[randInt(0, cands.length-1)];
+  const kk = keyXY(pick.x, pick.y);
+  lvl.items.set(kk, { type: ENT.WEAPON, name: safeName, atk: safeAtk });
+}
+
+function triggerNearDeath(lvl){
+  // Near-Death means: you are NOT defeated.
+  game.ended = false;
+  game.victory = null;
+
+  // 1) Wake state
+  game.hp = 1;
+
+  // 2) Clear immediate danger (room/cave simplification -> clear ALL monsters on the level)
+  if(lvl && lvl.monsters) lvl.monsters.clear();
+
+  // 3) Ransack gold
+  game.gold = 0;
+  game.cgold = 0;
+
+  // 4) Potions: keep 1 heal only if you had any heals; remove others
+  const hadHeal = game.inv.potions.includes(POTION.HEAL);
+  game.inv.potions = hadHeal ? [POTION.HEAL] : [];
+
+  // 5) Weapon: strip to bare hands, but drop the old weapon "just out of sight"
+  const lostWeapon = game.weaponEquipped ? { name: game.weaponName, atk: game.atk } : null;
+
+  game.atk = 3;
+  game.weaponName = "Bare Hands";
+  game.weaponEquipped = false;
+
+  if(lostWeapon){
+    placeNearDeathWeaponDrop(lvl, lostWeapon);
+  }
+
+  // 6) Post-defeat debuffs
+  game.nd = {
+    staggerLeft: 8,
+    slimeLeft: 11,
+    staggerMsgFired: false,
+    _slimeWait: false
+  };
+
+  // 7) Messages (logged newest-first)
+  fireLoreOnce(
+    `nd_wake_${game.depth}`,   // per-depth key (or just 'nd_wake' if you want once-per-run)
+    "You come to slowly. The area is quiet. Some of your possessions are missing. Ugh."
+  );
+
+  computeFov(lvl);
+  renderAll();
+}
+
+function endGameLose(){
+  if(game.ended) return;
+
+  // Near-Death intercept
+    try{
+      const forced = (typeof shouldForceNearDeathNow === 'function' && shouldForceNearDeathNow());
+
+      // Normal play chance (no URL params)
+      const rolled = (Math.random() < NEAR_DEATH_CHANCE);
+
+      // Optional: prevent more than once per run
+      const allowed = !game.ndUsed;
+
+      if(forced || (allowed && rolled)){
+        if(typeof consumeNearDeathHarnessIfNeeded === 'function') consumeNearDeathHarnessIfNeeded();
+        game.ndUsed = true; // lock it to once per run
+        triggerNearDeath(getLevel(game.depth));
+        return;
+      }
+    }catch(_){}
+
     game.ended = true;
     game.victory = false;
     logMsg("Defeat — the depths claim another explorer.");
@@ -4593,9 +4884,9 @@ const HERD_SPECS = [
     leaderGlyph: ENT.SPIDER_QUEEN,
     minDepth: 11,
     hp: [18, 26],
-    atk: [5, 8],
+    atk: [2, 4],
     leaderHpBonus: [8, 14],
-    leaderAtkBonus: [2, 4],
+    leaderAtkBonus: [1, 2],
     packSize: [3, 6],
     capPerFloor: (d)=> (d < 16 ? 7 : 10),
     maxPacks: (d)=> (d < 16 ? 1 : 2),
@@ -6179,6 +6470,12 @@ chooseBlackoutRooms(lvl, rooms, depth, startPos, downPos);
       spawnMountainHorde(lvl, depth, monsters, tiles, isNormal, forbidOnTrader, startPos, downPos, randInt(2,4), __spawnMode);
     }
 
+    // Steel encounter harness + real encounters (depth 4 and 13)
+    const __sMode = getSteelMode(depth);
+    if(__sMode){
+      spawnSteelEncounter(lvl, depth, __sMode);
+    }
+
     // Boss on 20th level: Deep Horror
     if(depth === 20){      
       for(let tries=0; tries<9000; tries++){
@@ -7243,8 +7540,8 @@ function roomPassableInteriorCount(lvl, r){
     }
     playSfx('attack');
     const __enc = touchCorpseEncounter(lvl);
-    const k = keyXY(mx,my);
-    const m = lvl.monsters.get(k);
+    let k = keyXY(mx,my);
+    let m = lvl.monsters.get(k);
     const __mMode = getMountainMode(game.depth);
     
     // Mountain TRIAL: no progress; hits only teach.
@@ -7262,11 +7559,63 @@ function roomPassableInteriorCount(lvl, r){
       return;
     }
 
+
+    // Spider SHELL proxy: Queen cannot be hit while her shell is intact.
+    // While at least one spider guard remains adjacent to the Queen, your strike is diverted into the shell.
+    if(m && m.packId && m.packLeader && m.herdType === "spider"){
+      const packId = m.packId;
+      const guards = [];
+      for(const [kk, mm] of lvl.monsters.entries()){
+        if(!mm || mm.packId !== packId) continue;
+        if(mm.packLeader) continue;
+        if(mm.herdType !== "spider") continue;
+        const pos = parseKey(kk);
+        const distQ = Math.max(Math.abs(pos.x - mx), Math.abs(pos.y - my));
+        if(distQ <= 1){
+          const distP = Math.max(Math.abs(pos.x - _p.x), Math.abs(pos.y - _p.y));
+          guards.push({ kk, mm, x: pos.x, y: pos.y, distP });
+        }
+      }
+      if(guards.length){
+        guards.sort((a,b)=>a.distP - b.distP);
+        const g = guards[0];
+        logMsg("The Spider Queen is shielded by her shell.");
+        k = g.kk; m = g.mm; mx = g.x; my = g.y;
+      }
+    }
+
     let dmg = randInt(1, game.atk);
     if(!game.weaponEquipped){
       dmg = Math.max(1, Math.floor(dmg/2));
     }
     m.hp -= dmg;
+
+    // --- Steel encounters: sardonic stage messaging + immobile feel ---
+    if(m && m.steelKind){
+      if(!m.__steelIntro){
+        m.__steelIntro = true;
+        if(m.steelKind === "BRO"){
+          logMsg("Careful.", "lore");
+        }else{
+          logMsg("Excuse me—my sharper edges… but they cut!", "lore");
+        }
+      }
+      if(m.hp > 0 && m.steelKind === "HUNK"){
+        const maxHp = (m.hpMax || 1);
+        const pct = (m.hp / maxHp);
+        let stage = 0;
+        if(pct <= 0.25) stage = 3;
+        else if(pct <= 0.50) stage = 2;
+        else if(pct <= 0.75) stage = 1;
+        if(typeof m.steelStage !== "number") m.steelStage = 0;
+        if(stage > m.steelStage){
+          m.steelStage = stage;
+          if(stage === 1) logMsg("That thing is aware?", "lore");
+          if(stage === 2) logMsg("A clatter spreads.", "lore");
+          if(stage === 3) logMsg("The clanking mass seems to wince.", "lore");
+        }
+      }
+    }
 
     // --- Mountain anti-spam nudge (player-driven) ---
     if(isMountainBossGlyph(m.glyph)){
@@ -7301,6 +7650,11 @@ function roomPassableInteriorCount(lvl, r){
         logMsg("You gain +1000 gold.");
         playSfx("mtn_fall");
       }
+      if(m && m.steelKind){
+        if(m.steelKind === "BRO") logMsg("The older mass settles, then hardens.", "lore");
+        else logMsg("The hunk sulks, then seeps away, eyeballs behind.", "lore");
+      }
+
       // Visual-only death dissolve (one tile). We delete the monster immediately,
       // but the animation stores glyph+color so it can render independently.
       const __deathColor = (m && m.chaos) ? (COL.chaosRelic || "#c77dff") : ((m && m.color) ? m.color : ((typeof MONSTER_COLOR !== "undefined" && MONSTER_COLOR[m.glyph]) ? MONSTER_COLOR[m.glyph] : (COL?.monster || "#ff6b6b")));
@@ -7312,6 +7666,8 @@ function roomPassableInteriorCount(lvl, r){
       // Step 1: prove variants work by simple per-kill randomization (no renderer changes).
       // (We can re-introduce Option B encounter coherence once this is stable.)
       const v = randInt(1, CORPSE_VARIANTS);
+
+      if(!(m && m.steelKind)){
 
       setTimeout(() => {
   try{
@@ -7329,6 +7685,7 @@ function roomPassableInteriorCount(lvl, r){
     setTimeout(() => { try{ renderScreen(); }catch(_e){} }, 0);
   }catch(_e){}
 }, 700);
+      }
 
       lvl.monsters.delete(k);
 
@@ -7384,36 +7741,38 @@ function roomPassableInteriorCount(lvl, r){
       if(m && m.isIntercessor) bounty = bounty * 3; // Intercessor pays out big (2–3x typical)
       // Arbiter-only payout (ambush boss): fixed ceremonial range
       if(m && m.isAmbushBoss) bounty = randInt(20, 50);
+      // Steel bounty enhancement (fixed): Hunk=20, Bro=50
+      if(m && m.steelKind) bounty = (m.steelKind === "BRO") ? 50 : 20;
       game.gold += bounty;
       logMsg(`${m.name} falls. +${bounty} gold.`);
     }
   }
 
   function monstersAct(lvl){
-  const p = lvl.player;
-  const next = new Map(lvl.monsters);
-  const __mMode = getMountainMode(game.depth);
+    const p = lvl.player;
+    const next = new Map(lvl.monsters);
+    const __mMode = getMountainMode(game.depth);
 
-  // Index packs (skeleton herds)
-  const leaders = new Map();       // packId -> {k,m,x,y}
-  const followers = [];            // {k,m,x,y}
+    // Index packs (skeleton herds)
+    const leaders = new Map();       // packId -> {k,m,x,y}
+    const followers = [];            // {k,m,x,y}
 
-  for(const [k, m] of lvl.monsters.entries()){
-    if(m && m.packId){
-      const pos = parseKey(k);
-      if(m.packLeader && !leaders.has(m.packId)){
-        leaders.set(m.packId, { k, m, x: pos.x, y: pos.y });
-      } else {
-        followers.push({ k, m, x: pos.x, y: pos.y });
-        // If the pack has no explicit leader (older saves), first seen becomes leader
-        if(!leaders.has(m.packId)){
-          m.packLeader = true;
+    for(const [k, m] of lvl.monsters.entries()){
+      if(m && m.packId){
+        const pos = parseKey(k);
+        if(m.packLeader && !leaders.has(m.packId)){
           leaders.set(m.packId, { k, m, x: pos.x, y: pos.y });
-          followers.pop(); // reclassify this one as leader
+        } else {
+          followers.push({ k, m, x: pos.x, y: pos.y });
+          // If the pack has no explicit leader (older saves), first seen becomes leader
+          if(!leaders.has(m.packId)){
+            m.packLeader = true;
+            leaders.set(m.packId, { k, m, x: pos.x, y: pos.y });
+            followers.pop(); // reclassify this one as leader
+          }
         }
       }
     }
-  }
 
   function packStretch(packId, lx, ly){
     let md = 0;
@@ -7427,7 +7786,7 @@ function roomPassableInteriorCount(lvl, r){
   }
 
   // Helper: attempt to move monster from (x,y) by (dx,dy) respecting rules.
-  function tryMove(k, m, x, y, dx, dy){
+  function tryMoveMonster(k, m, x, y, dx, dy){
     const nx = x + dx, ny = y + dy;
     const nk = keyXY(nx,ny);
     if(nx<1||ny<1||nx>=MAP_W-1||ny>=MAP_H-1) return k;
@@ -7467,6 +7826,28 @@ function roomPassableInteriorCount(lvl, r){
     next.set(nk, m);
     return nk;
   }
+
+
+
+  function isCyclopsTempo(m){
+    return m && m.herdType === "cyclops";
+  }
+  function tempoGateOrConsume(m){
+    if(!isCyclopsTempo(m)) return false;     // not gated
+    if(!m._tempoWait){ return false; }       // not waiting
+    m._tempoWait = false;                    // consume wait
+    return true;                             // skip this turn
+  }
+  function tempoMarkUsed(m){
+    if(isCyclopsTempo(m)) m._tempoWait = true;
+  }
+
+
+
+
+
+
+
 
   function computeChaseOrWander(x,y, m){
     const dist = Math.max(Math.abs(p.x-x), Math.abs(p.y-y));
@@ -7626,6 +8007,8 @@ if(m && m.guardIntercessor){
     const {x,y} = parseKey(k);
     if(m && m.pacified) continue;
 
+    // immobile monsters don't move, but they CAN still attack if adjacent
+
     // Followers will be handled in phase 2
     if(m && m.packId && !m.packLeader) continue;
 
@@ -7644,6 +8027,10 @@ if(m && m.guardIntercessor){
     if(dist === 1){
       // Bridge combat isolation: bridge separates combat layers (monsters)
       if(isBridgeAny(lvl, x, y) !== isBridgeAny(lvl, p.x, p.y)) continue;
+      // Cyclops TEMPO proxy: after acting, cyclops must recover for 1 turn.
+      if(tempoGateOrConsume(m)) continue;
+      // Cyclops TEMPO proxy: after acting, cyclops must recover for 1 turn.
+      if(tempoGateOrConsume(m)) continue;
       const dmg = randInt(1, m.atk);
 
       // Mountain TRIAL: drain to 1 HP, then withdraw (no death).
@@ -7652,6 +8039,8 @@ if(m && m.guardIntercessor){
         game.hp = Math.max(1, newHp);
         playSfx('damage');
         logMsg(`${m.name} hits for ${dmg}.`);
+        tempoMarkUsed(m);
+        tempoMarkUsed(m);
         if(game.hp <= 1){
           // Trial ends: Mountain and shards vanish.
           try{ getTrialState(lvl).completed = true; }catch(_){}
@@ -7665,6 +8054,8 @@ if(m && m.guardIntercessor){
 
       if(hasInvincible()){
         logMsg(`${m.name} strikes — but it cannot harm you.`);
+        tempoMarkUsed(m);
+        tempoMarkUsed(m);
       } else {
         game.hp -= dmg;
         playSfx('damage');
@@ -7679,10 +8070,18 @@ if(m && m.guardIntercessor){
       continue;
     }
 
+    // After resolving adjacency attacks, immobile monsters do not take movement actions.
+    if(m && m.immobile) continue;
+
+
+    // Cyclops TEMPO proxy: if waiting, skip this turn.
+    if(tempoGateOrConsume(m)) continue;
+
     const step = computeChaseOrWander(x,y,m);
     if(!step) continue;
 
-    const nk = tryMove(k, m, x, y, step.dx, step.dy);
+    const nk = tryMoveMonster(k, m, x, y, step.dx, step.dy);
+    if(nk !== k) tempoMarkUsed(m);
 
     if(m && m.packId){
       const pos = parseKey(nk);
@@ -7710,6 +8109,8 @@ if(m && m.guardIntercessor){
     if(distP === 1){
       // Bridge combat isolation: bridge separates combat layers (followers)
       if(isBridgeAny(lvl, x, y) !== isBridgeAny(lvl, p.x, p.y)) continue;
+      // Cyclops TEMPO proxy: after acting, cyclops must recover for 1 turn.
+      if(tempoGateOrConsume(m)) continue;
       const dmg = randInt(1, m.atk);
       if(hasInvincible()){
         logMsg(`${m.name} strikes — but it cannot harm you.`);
@@ -7727,6 +8128,9 @@ if(m && m.guardIntercessor){
       continue;
     }
 
+    // Cyclops TEMPO proxy: if waiting, skip this turn.
+    if(tempoGateOrConsume(m)) continue;
+
     const lead = leaderNewPos.get(m.packId) || leaders.get(m.packId);
     if(!lead) continue;
 
@@ -7736,7 +8140,10 @@ const distL = Math.max(Math.abs(lead.x - x), Math.abs(lead.y - y));
 
 let tx = lead.x, ty = lead.y;
 
-if(distL <= 2){
+if(m && m.herdType === "spider"){
+  // Firm shell: once a spider is in the Queen's ring, it holds position.
+  if(distL <= 1) continue;
+} else if(distL <= 2){
   // close enough: occasional jitter & hesitation for a shambling herd feel
   if(Math.random() < 0.30) continue; // pause
   if(Math.random() < 0.35){
@@ -7761,9 +8168,10 @@ if(dx===0 && dy===0) continue;
 
     for(const a of attempted){
       const beforeSize = next.size;
-      const nk = tryMove(k, m, x, y, a.dx, a.dy);
+      const nk = tryMoveMonster(k, m, x, y, a.dx, a.dy);
       if(nk !== k || next.size !== beforeSize){
         moved = (nk !== k);
+        if(moved) tempoMarkUsed(m);
         break;
       }
     }
@@ -7915,7 +8323,50 @@ if(dx===0 && dy===0) continue;
       return;
     }
 
-    const nx = p.x + dx, ny = p.y + dy;
+// --- Near-Death movement effects (PLAYER) ---
+// Stagger: random 8-way direction for 3 movement attempts (message once)
+// Slime: consume every other movement attempt for 6 attempts (silent)
+if(game.nd && (dx !== 0 || dy !== 0)){
+  if(game.nd.staggerLeft > 0){
+    if(!game.nd.staggerMsgFired){
+      logMsg("Your senses betray you.");
+      game.nd.staggerMsgFired = true;
+    }
+    const dirs = [
+      [-1,-1],[0,-1],[1,-1],
+      [-1, 0],       [1, 0],
+      [-1, 1],[0, 1],[1, 1]
+    ];
+    const pick = dirs[randInt(0, dirs.length - 1)];
+    dx = pick[0];
+    dy = pick[1];
+    game.nd.staggerLeft--;
+  }
+
+  if(game.nd.slimeLeft > 0){
+    if(!game.nd._slimeWait){
+      game.nd._slimeWait = true;
+      game.nd.slimeLeft--;
+
+      advanceTorchOnMove();
+      tickEffectsOnStep();
+      if(game.ended) { renderAll(true); return; }
+      monstersAct(lvl);
+      computeFov(lvl);
+      renderAll();
+      return;
+    } else {
+      game.nd._slimeWait = false;
+      game.nd.slimeLeft--;
+    }
+
+    if(game.nd.slimeLeft <= 0 && game.nd.staggerLeft <= 0){
+      game.nd = null;
+    }
+  }
+}
+
+        const nx = p.x + dx, ny = p.y + dy;
     if(nx<0||ny<0||nx>=MAP_W||ny>=MAP_H){ playSfx('bump'); return; }
 
     if(dx!==0 && dy!==0){
@@ -8251,8 +8702,12 @@ else if(it.type === ENT.CHEST){
         playSfx('pickup');
         lvl.items.delete(mk);
       } else if(it.type === ENT.WEAPON){
-        game.atk = Math.max(game.atk, it.atk);
-        game.weaponName = it.name;
+        // Defensive: weapon items may be malformed (e.g., post-defeat drops). Never let that break rendering.
+        const safeAtk = Number.isFinite(it.atk) ? it.atk : 3;
+        const safeName = (it.name && String(it.name).trim()) ? it.name : "Unknown Steel";
+
+        game.atk = Math.max(game.atk, safeAtk);
+        game.weaponName = safeName;
         playSfx('pickup');
         const _hadWeapon = game.weaponEquipped;
         game.weaponEquipped = true;
@@ -8266,7 +8721,7 @@ if(!_hadWeapon){
 }
 if(_hadWeapon) game.weaponUpgradeCount++;
 
-        logMsg(`Weapon found (ƪ): ${it.name} (ATK ${it.atk}).`);
+        logMsg(`Weapon found (ƪ): ${safeName} (ATK ${safeAtk}).`);
         lvl.items.delete(mk);
       } else if(it.type === ENT.TORCH){
         const cnt = it.count || 1;
