@@ -66,6 +66,7 @@
 :root { color-scheme: dark; }
     body{
       margin:0;
+      overflow-x:hidden;
       min-height:100vh;
       background:#0b0f12;
       color:#cfd8dc;
@@ -116,16 +117,41 @@
     }
 
     /* HUD: single-line terminal-style header */
-    .hud{
-      display:flex;
-      flex-wrap:wrap;
-      gap: 0;
-      align-items:baseline;
-      min-width:0;
-      font-size:18px;
-      line-height:1.1;
-      white-space:nowrap;
-    }
+/* HUD: force single-row pill (no wrapping) */
+.hud{
+  display:flex;
+  flex-wrap:nowrap;              /* <-- was wrap; this is the key */
+  gap:0;
+  align-items:center;            /* baseline can cause odd vertical jitter */
+  min-width:0;
+
+  font-size:18px;
+  line-height:1.1;
+  white-space:nowrap;
+
+  overflow-x:auto;               /* <-- keeps it one row without losing info */
+  overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+
+  /* keep one-row; allow swipe scroll but hide scrollbar */
+  scrollbar-width: none;           /* Firefox */
+  -ms-overflow-style: none;        /* IE/Edge legacy */
+}
+.hud::-webkit-scrollbar{ height:0; width:0; display:none; }
+
+.hud .hud-item{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:0 18px 0 0;
+  border:none;
+  background:transparent;
+  border-radius:0;
+  white-space:nowrap;
+
+  flex:0 0 auto;                 /* <-- prevents shrink/wrap behavior */
+}
+
     .hud .hud-item{
       display:inline-flex;
       align-items:baseline;
@@ -244,6 +270,24 @@ button{
     }
 
     @media (max-width: 980px){
+  /* --- Mobile header/HUD compaction (no renderer risk) --- */
+
+  /* HUD spacing: rely on per-item padding so we can make potion->torch touch */
+  .hud{ gap: 0 !important; }
+  .hud .hud-item{ padding-right: 12px !important; }
+  .hud .hud-item.potion{ padding-right: 0 !important; gap: 0 !important; }
+  .hud .hud-item.potion .hud-ico{ margin-right: 0 !important; }
+  .hud .hud-item.torch{ padding-left: 0 !important; }
+  .panel.header{ padding: 6px 8px !important; }
+  .header{ padding: 6px 8px !important; gap: 8px !important; }
+  .header-left{ gap: 8px !important; flex-wrap: nowrap !important; overflow: hidden; }
+  .header-right{ gap: 8px !important; }
+  .header-right button{ padding: 7px 9px !important; border-radius: 10px !important; }
+  .hud{ font-size: 16px !important; line-height: 1.0 !important; }
+  .hud .hud-item{ padding-right: 12px !important; gap: 6px !important; }
+  .hud-ico{ height: 16px !important; margin-right: 4px !important; vertical-align: -2px !important; }
+  .hud-logo img{ height: 30px !important; }
+
       .main{
         grid-template-columns: 1fr;
         grid-template-rows: auto auto auto;
@@ -462,8 +506,8 @@ button{
 #splash.hidden { display:none; }
 
 .splash-frame {
-  width: min(980px, 94vw);
-  aspect-ratio: 16/9;
+  width: min(520px, 92vw);
+  aspect-ratio: 9/16;
   border-radius: 20px;
   background: #06080a;
   border: 1px solid rgba(255,255,255,.10);
@@ -476,7 +520,7 @@ button{
 .splash-reveal {
   position: absolute;
   inset: 0;
-  background-image: url("images/dd_logo.jpg");
+  background-image: url("dd_logo_portrait.jpeg");
   background-size: cover;
   background-position: center;
   image-rendering: auto;
@@ -1013,6 +1057,431 @@ button{
     inset 0 -1px 0 rgba(0,0,0,0.60);
   user-select:none;
   pointer-events:none;
+}
+
+
+/* --- HUD spacing normalization (torch & potions) --- */
+
+/* Standard inter-item gap (HP → potion, potion → torch icon) */
+.hud .hud-item.hp,
+.hud .hud-item.potion{
+  margin-right:12px !important;
+}
+
+/* Torch: no space between count and total (0/2) */
+.hud-item.torch{
+  gap:0 !important;
+  padding-right:12px !important; /* next-item spacing consistency */
+}
+
+.hud-item.torch .hud-ico{
+  margin-right:0 !important;
+}
+
+/* Numbers inside torch should not introduce spacing */
+.hud-item.torch span{
+  margin:0 !important;
+  padding:0 !important;
+}
+
+
+/* --- Weapon HUD tightening --- */
+
+/* Remove weapon description text like (Bare Hands) */
+.hud-item.weapon .weapon-name,
+.hud-item.weapon .weapon-desc,
+.hud-item.weapon .weapon-text,
+.hud-item.weapon .desc{
+  display:none !important;
+}
+
+/* No space between weapon icon and ATK number */
+.hud-item.weapon{
+  gap:0 !important;
+}
+
+.hud-item.weapon .hud-ico{
+  margin-right:0 !important;
+}
+
+/* Ensure number doesn't add spacing */
+.hud-item.weapon span{
+  margin:0 !important;
+  padding:0 !important;
+}
+
+
+/* --- Ensure Bare Hands treated same as weapon --- */
+
+/* Hide any remaining weapon/bare-hands descriptive text */
+.hud-item.weapon .weapon-name,
+.hud-item.weapon .weapon-desc,
+.hud-item.weapon .weapon-text,
+.hud-item.weapon .desc,
+.hud-item.bare .weapon-name,
+.hud-item.bare .weapon-desc,
+.hud-item.bare .weapon-text,
+.hud-item.bare .desc{
+  display:none !important;
+}
+
+/* Weapon + bare hands: icon glued to ATK number */
+.hud-item.weapon,
+.hud-item.bare{
+  gap:0 !important;
+}
+
+.hud-item.weapon .hud-ico,
+.hud-item.bare .hud-ico{
+  margin-right:0 !important;
+}
+
+.hud-item.weapon span,
+.hud-item.bare span{
+  margin:0 !important;
+  padding:0 !important;
+}
+
+
+/* --- Gold & Keys tightening --- */
+
+/* Gold: no space between chest icon and amount */
+.hud-item.gold{
+  gap:0 !important;
+}
+.hud-item.gold .hud-ico{
+  margin-right:0 !important;
+}
+.hud-item.gold span{
+  margin:0 !important;
+  padding:0 !important;
+}
+
+/* Keys: no space between key icon and count */
+.hud-item.keys{
+  gap:0 !important;
+}
+.hud-item.keys .hud-ico{
+  margin-right:0 !important;
+}
+.hud-item.keys span{
+  margin:0 !important;
+  padding:0 !important;
+}
+
+
+
+
+/* --- Match gold/keys spacing to potion/torch rhythm --- */
+.hud .hud-item.gold,
+.hud .hud-item.keys{
+  margin-right:8px !important;
+}
+
+
+/* --- Mobile: remove admin controls from HUD (kept in DOM for popup rehook) --- */
+@media (max-width: 980px){
+  /* Hide level readout in top HUD */
+  .hud-item.lvl{ display:none !important; }
+
+  /* Hide header buttons we will rehook under ? menu */
+  #btnReset, #resetBtn, .btn-reset,
+  #btnMute,  #muteBtn,  .btn-mute,
+  #btnSkip,  #skipBtn,  .btn-skip,
+  button[title="Reset"], button[aria-label="Reset"],
+  button[title="Mute"],  button[aria-label="Mute"],
+  button[title="Skip"],  button[aria-label="Skip"]{
+    display:none !important;
+  }
+}
+
+
+  .mobile-menu-btn:active{ transform: translateY(1px); }
+
+  
+
+  
+
+  .mobile-menu-row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 2px;
+  }
+  .mobile-menu-actions{ justify-content:flex-start; gap: 10px; }
+
+  .mobile-menu-action{
+    flex: 1 1 0;
+    padding: 10px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(130,190,210,.28);
+    background: rgba(15,25,32,.22);
+    color: rgba(230,240,255,.92);
+    font-size: 14px;
+  }
+
+  .mobile-menu-level{
+    color: rgba(230,240,255,.88);
+    font-size: 14px;
+  }
+  .mobile-menu-label{ opacity:.9; }
+  .mobile-menu-value{ font-weight:700; letter-spacing:.04em; }
+
+  .mobile-menu-sep{
+    height: 1px;
+    background: rgba(130,190,210,.18);
+    margin: 6px 0;
+  }
+
+  .mobile-menu-danger{
+    width: 100%;
+    padding: 10px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(230,120,120,.28);
+    background: rgba(120,20,20,.18);
+    color: rgba(255,230,230,.92);
+    font-size: 14px;
+  }
+
+  /* If any legacy help button exists, hide it on mobile (we replace it with the floating ?) */
+  .mobile-hidden-help{ display:none !important; }
+}
+
+
+@media (max-width: 980px){
+  .mobile-menu-btn{
+    font-size: 26px;
+    letter-spacing: -0.02em;
+  }
+}
+
+
+.mobile-menu-panel.open{
+    opacity:1;
+    transform: translateY(0) scale(1);
+    pointer-events:auto;
+  }
+
+  
+
+  /* Optional: animate the hamburger button a touch when open */
+  .mobile-menu-btn.open{
+    border-color: rgba(130,190,210,.55);
+    background: rgba(15,25,32,.16);
+  }
+}
+
+
+  @keyframes ddPopIn{
+    from{ opacity:0; transform: translateY(-6px) scale(.98); }
+    to  { opacity:1; transform: translateY(0) scale(1); }
+  }
+  @keyframes ddFadeIn{
+    from{ opacity:0; }
+    to  { opacity:1; }
+  }
+}
+
+
+  .mobile-menu-backdrop.open{
+    display:block;
+    pointer-events:auto;
+    background: rgba(0,0,0,.06);
+    animation: ddFadeIn 160ms ease-out both;
+  }
+
+  .mobile-menu-panel{
+    position: fixed;
+    right: 14px;
+    top: 170px;
+    min-width: 220px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(130,190,210,.28);
+    background: rgba(15,25,32,.10);         /* transparent like hamburger */
+    box-shadow: 0 18px 50px rgba(0,0,0,.45);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 2001;
+    display:none;
+    pointer-events:none;
+  }
+  .mobile-menu-panel.open{
+    display:block;
+    pointer-events:auto;
+    animation: ddPopIn 180ms ease-out both;
+  }
+
+  @keyframes ddPopIn{
+    from{ opacity:0; transform: translateY(-6px) scale(.98); }
+    to  { opacity:1; transform: translateY(0) scale(1); }
+  }
+  @keyframes ddFadeIn{
+    from{ opacity:0; }
+    to  { opacity:1; }
+  }
+
+  /* Buttons inside panel: also transparent */
+  .mobile-menu-action{
+    border: 1px solid rgba(130,190,210,.28);
+    background: rgba(15,25,32,.10);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+}
+
+
+/* --- Mobile menu (final): hidden by default, transparent, toggled by .open --- */
+@media (max-width: 980px){
+  .mobile-menu-btn{
+    position: fixed;
+    right: 14px;
+    top: 118px;
+    width: 46px;
+    height: 46px;
+    border-radius: 999px;
+    border: 2px solid rgba(130,190,210,.35);
+    background: rgba(15,25,32,.10);
+    color: rgba(230,240,255,.90);
+    font-family: inherit;
+    font-size: 26px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 2000;
+    touch-action: manipulation;
+    user-select: none;
+  }
+  .mobile-menu-btn.open{
+    border-color: rgba(130,190,210,.55);
+    background: rgba(15,25,32,.16);
+  }
+
+  .mobile-menu-backdrop{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.0);
+    z-index: 1990;
+    display:none;
+    pointer-events:none;
+  }
+  .mobile-menu-backdrop.open{
+    display:block;
+    pointer-events:auto;
+    background: rgba(0,0,0,.06);
+    animation: ddFadeIn 160ms ease-out both;
+  }
+
+  .mobile-menu-panel{
+    position: fixed;
+    right: 14px;
+    top: 170px;
+    min-width: 240px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(130,190,210,.28);
+    background: rgba(15,25,32,.10);
+    box-shadow: 0 18px 50px rgba(0,0,0,.45);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 2001;
+    display:none;
+    pointer-events:none;
+  }
+  .mobile-menu-panel.open{
+    display:block;
+    pointer-events:auto;
+    animation: ddPopIn 180ms ease-out both;
+  }
+
+  .mobile-menu-row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 2px;
+  }
+  .mobile-menu-actions{ justify-content:flex-start; gap: 10px; }
+
+  .mobile-menu-action{
+    flex: 1 1 0;
+    padding: 10px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(130,190,210,.28);
+    background: rgba(15,25,32,.10);
+    color: rgba(230,240,255,.92);
+    font-size: 14px;
+  }
+
+  .mobile-menu-level{ color: rgba(230,240,255,.88); font-size: 14px; }
+  .mobile-menu-label{ opacity:.9; }
+  .mobile-menu-value{ font-weight:700; letter-spacing:.04em; }
+
+  .mobile-menu-sep{ height:1px; background: rgba(130,190,210,.18); margin: 6px 0; }
+
+  .mobile-menu-danger{
+    width: 100%;
+    padding: 10px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(230,120,120,.28);
+    background: rgba(120,20,20,.14);
+    color: rgba(255,230,230,.92);
+    font-size: 14px;
+  }
+
+  @keyframes ddPopIn{
+    from{ opacity:0; transform: translateY(-6px) scale(.98); }
+    to  { opacity:1; transform: translateY(0) scale(1); }
+  }
+  @keyframes ddFadeIn{
+    from{ opacity:0; }
+    to  { opacity:1; }
+  }
+}
+
+
+/* --- Mobile floating menu: ensure hamburger is visible (positioned overlay) --- */
+@media (max-width: 980px){
+  #restartBtn{ display:none !important; } /* hide header reset on mobile */
+
+  .mobile-menu-btn{
+    position: fixed !important;
+    right: 14px !important;
+    top: 118px !important;
+    width: 46px !important;
+    height: 46px !important;
+    border-radius: 999px !important;
+    border: 2px solid rgba(130,190,210,.35) !important;
+    background: rgba(15,25,32,.10) !important;
+    color: rgba(230,240,255,.90) !important;
+    font-family: inherit !important;
+    font-size: 26px !important;
+    line-height: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35) !important;
+    backdrop-filter: blur(6px) !important;
+    -webkit-backdrop-filter: blur(6px) !important;
+    z-index: 2000 !important;
+    touch-action: manipulation !important;
+    user-select: none !important;
+  }
+  .mobile-menu-btn.open{
+    border-color: rgba(130,190,210,.55) !important;
+    background: rgba(15,25,32,.16) !important;
+  }
+}
+
+
+@media (max-width: 980px){
+  /* optional: if we can detect mute via body class, tint the menu mute button slightly */
+  #mobileMenuMute.is-on{ filter: brightness(1.05) saturate(1.05); }
 }
 
 </style>
@@ -9379,15 +9848,12 @@ const safe = ch === ' ' ? '&nbsp;' : escapeHtml(ch);
 
     $hud.innerHTML = `
       <span class="hud-item muted"><b>HP</b> ${game.hp}/${game.hpMax}</span>
-      <span class="hud-item muted">[P] Heal</span>
-      <span class="hud-item muted"><img class="hud-ico" src="images/icons/potion_18.png" alt="Potions" title="Potion" /> <b>${potionCount}</b>/<b>${POTION_CAP}</b>${potBits.length ? ` ${potBits.join(' ')}` : ``}</span>
-      <span class="hud-item muted"><img class="hud-ico" src="images/icons/torch_18.png" alt="Torch" title="Torch" /> <b>${game.inv.torches}</b>/<b>${TORCH_CAP}</b></span>
-      <span class="hud-item muted"><img class="hud-ico" src="images/icons/${escapeHtml(game.weaponName)==='Bare Hands' ? 'fist_18.png' : 'sword_18.png'}" alt="Weapon" title="Weapon" /> <b>${game.atk}</b> (${escapeHtml(game.weaponName)})</span>
-      <span class="hud-item muted"><img class="hud-ico" src="images/icons/chest_18.png" alt="Gold" title="Chest" /> <b>${game.gold}</b></span>
-      <span class="hud-item muted"><img class="hud-ico" src="images/icons/key_18.png" alt="Keys" title="Key" /> <b>${game.inv.keys}</b></span>
-      <span class="hud-item muted">Lvl <b>${depthStr}</b></span>
-
-      ${DEBUG ? `
+<span class="hud-item muted potion"><img class="hud-ico" src="images/icons/potion_18.png" alt="Potions" title="Potions" /><b>${potionCount}</b>/<b>${POTION_CAP}</b></span><span class="hud-item muted torch"><img class="hud-ico" src="images/icons/torch_18.png" alt="Torch" title="Torch" /><b>${game.inv.torches}</b>/<b>${TORCH_CAP}</b></span>
+      <span class="hud-item weapon muted"><img class="hud-ico" src="images/icons/${escapeHtml(game.weaponName)==='Bare Hands' ? 'fist_18.png' : 'sword_18.png'}" alt="Weapon" title="Weapon" /><b>${game.atk}</b></span>
+      <span class="hud-item muted gold"><img class="hud-ico" src="images/icons/chest_18.png" alt="Gold" title="Chest" /><b>${game.gold}</b></span>
+      <span class="hud-item muted keys"><img class="hud-ico" src="images/icons/key_18.png" alt="Keys" title="Key" /><b>${game.inv.keys}</b></span>
+      <span class="hud-item muted lvl" style="display:none">Lvl <b>${depthStr}</b></span>
+${DEBUG ? `
         <div class="hud-debug">
           <span><b>DEBUG</b></span>
           <span>Depth: ${game.depth}</span>
@@ -9865,37 +10331,35 @@ function spendGoldWithCGoldFirst(cost){
   const root = document.documentElement;
 
   function dispatchKey(k){
-    // Try hard to feed the *existing* v218 key pipeline (some builds listen on window)
+    // Feed the existing v218 key pipeline *once*.
+    // Dispatching to window+document+body can cause duplicate moves if the game listens in multiple places.
     try{
       const screen = document.getElementById("screen");
       if(screen){
         if(!screen.hasAttribute("tabindex")) screen.tabIndex = -1;
         try{ screen.focus({ preventScroll:true }); }catch(_){ screen.focus(); }
+        const ev = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
+        screen.dispatchEvent(ev);
       }else{
-        try{ document.body.focus({ preventScroll:true }); }catch(_){ document.body.focus(); }
+        const ev = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
+        window.dispatchEvent(ev);
       }
-
-      const ev = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
-      window.dispatchEvent(ev);
-      document.dispatchEvent(ev);
-      document.body && document.body.dispatchEvent(ev);
     }catch(e){
       // Last resort: older browsers / restricted KeyboardEvent construction
-      const evt = document.createEvent("Event");
-      evt.initEvent("keydown", true, true);
-      evt.key = k;
-      try{ window.dispatchEvent(evt); }catch(_){}
-      try{ document.dispatchEvent(evt); }catch(_){}
-      try{ document.body && document.body.dispatchEvent(evt); }catch(_){}
+      try{
+        const evt = document.createEvent("Event");
+        evt.initEvent("keydown", true, true);
+        evt.key = k;
+        window.dispatchEvent(evt);
+      }catch(_){}
     }
   }
-
-  // --- Press/repeat helper (mobile UI3 timing) ---
-  const repeat = { timer:null, interval:null, key:null, initialDelayMs:220, repeatMs:95 };
+const repeat = { timer:null, interval:null, key:null, down:false, downTs:0, initialDelayMs:330, repeatMs:95 };
   function clearRepeat(){
     if(repeat.timer){ clearTimeout(repeat.timer); repeat.timer=null; }
     if(repeat.interval){ clearInterval(repeat.interval); repeat.interval=null; }
     repeat.key=null;
+    repeat.down=false;
   }
 
   function pressBtn(btn, on){ if(btn) btn.classList.toggle("pressed", !!on); }
@@ -9909,16 +10373,22 @@ function spendGoldWithCGoldFirst(cost){
         btn.setPointerCapture(e.pointerId);
         clearRepeat();
         repeat.key = btn.dataset.k;
+        repeat.down = true;
+        repeat.downTs = performance.now();
 
         pressBtn(btn, true);
         dispatchKey(repeat.key);
 
         repeat.timer = setTimeout(()=>{
-          repeat.interval = setInterval(()=> dispatchKey(repeat.key), repeat.repeatMs);
+          // Guard: avoid accidental "double move" on slightly-long taps
+          if(!repeat.down) return;
+          if(!repeat.key) return;
+          if(performance.now() - repeat.downTs < repeat.initialDelayMs) return;
+          repeat.interval = setInterval(()=>{ if(repeat.down && repeat.key) dispatchKey(repeat.key); }, repeat.repeatMs);
         }, repeat.initialDelayMs);
       }, { passive:false });
 
-      btn.addEventListener("pointerup", (e)=>{ e.preventDefault(); pressBtn(btn,false); clearRepeat(); }, { passive:false });
+      btn.addEventListener("pointerup", (e)=>{ e.preventDefault(); repeat.down=false; pressBtn(btn,false); clearRepeat(); }, { passive:false });
       btn.addEventListener("pointercancel", ()=>{ pressBtn(btn,false); clearRepeat(); });
     });
   }
@@ -10107,6 +10577,137 @@ function spendGoldWithCGoldFirst(cost){
   // Make sure touch doesn't scroll/zoom while playing
   window.addEventListener("touchmove", (e)=>{ if(matchMedia("(max-width: 980px)").matches) e.preventDefault(); }, { passive:false });
 
+})();</script>
+
+
+
+<!-- Mobile floating menu (rehooks hidden header controls) -->
+<button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Menu" title="Menu">☰</button>
+<div id="mobileMenuPanel" class="mobile-menu-panel" role="dialog" aria-modal="false" aria-hidden="true"></div>
+<div id="mobileMenuBackdrop" class="mobile-menu-backdrop" aria-hidden="true"></div>
+
+<script>
+// --- Mobile floating menu wiring (rehook hidden controls) ---
+(function(){
+  function init(){
+    const btn = document.getElementById('mobileMenuBtn');
+    const panel = document.getElementById('mobileMenuPanel');
+    const backdrop = document.getElementById('mobileMenuBackdrop');
+
+    if(!btn || !panel || !backdrop) return;
+
+    // Build panel content (keeps markup minimal)
+    panel.innerHTML = `
+      <div class="mobile-menu-row mobile-menu-actions">
+        <button class="mobile-menu-action" id="mobileMenuMute" type="button">Mute</button>
+        <button class="mobile-menu-action" id="mobileMenuSkip" type="button">Skip</button>
+      </div>
+      <div class="mobile-menu-row mobile-menu-level">
+        <span class="mobile-menu-label">Level</span>
+        <span class="mobile-menu-value" id="mobileMenuLevel">—</span>
+      </div>
+      <div class="mobile-menu-sep" aria-hidden="true"></div>
+      <div class="mobile-menu-row mobile-menu-reset">
+        <button class="mobile-menu-danger" id="mobileMenuReset" type="button">Reset</button>
+      </div>
+    `;
+
+    const lvlEl = document.getElementById('mobileMenuLevel');
+
+    function isOpen(){ return panel.classList.contains('open'); }
+    function open(){
+      panel.classList.add('open');
+      backdrop.classList.add('open');
+      btn.classList.add('open');
+      panel.setAttribute('aria-hidden','false');
+      try{
+        const hiddenLvl = document.querySelector('.hud-item.lvl b');
+        if(hiddenLvl && hiddenLvl.textContent) lvlEl.textContent = hiddenLvl.textContent.trim();
+      syncIcons();
+      }catch(e){}
+    }
+    function close(){
+      panel.classList.remove('open');
+      backdrop.classList.remove('open');
+      btn.classList.remove('open');
+      panel.setAttribute('aria-hidden','true');
+    }
+    function toggle(){ isOpen() ? close() : open(); }
+
+    // Never let this interact with viewport handlers
+    btn.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); }, {passive:true});
+    btn.addEventListener('pointerup', (e)=>{ e.stopPropagation(); }, {passive:true});
+    btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); toggle(); }, {passive:false});
+
+    backdrop.addEventListener('click', close, {passive:true});
+    window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && isOpen()) close(); });
+
+    function clickAny(selectors){
+      for(const sel of selectors){
+        const el = document.querySelector(sel);
+        if(el){ el.click(); return true; }
+      }
+      return false;
+    }
+
+    
+
+    function syncIcons(){
+      try{
+        const srcMute = document.querySelector('#muteBtn, #btnMute, .btn-mute, button[title="Mute"], button[aria-label="Mute"]');
+        const srcSkip = document.querySelector('#skipBtn, #btnSkip, .btn-skip, button[title="Skip"], button[aria-label="Skip"]');
+        const mBtn = document.getElementById('mobileMenuMute');
+        const sBtn = document.getElementById('mobileMenuSkip');
+        if(srcMute && mBtn) mBtn.innerHTML = srcMute.innerHTML;
+        if(srcSkip && sBtn) sBtn.innerHTML = srcSkip.innerHTML;
+
+        // Mirror pressed state if the source uses aria-pressed or a class toggle
+        if(srcMute && mBtn){
+          const pressed = srcMute.getAttribute('aria-pressed');
+          if(pressed !== null) mBtn.setAttribute('aria-pressed', pressed);
+          // common patterns: .active / .on / .muted class on body
+          if(document.body.classList.contains('muted') || document.body.classList.contains('is-muted')){
+            mBtn.classList.add('is-on');
+          }else{
+            mBtn.classList.remove('is-on');
+          }
+        }
+      }catch(e){}
+    }
+document.getElementById('mobileMenuMute')?.addEventListener('click', ()=>{
+      clickAny(['#btnMute','#muteBtn','.btn-mute','button[title="Mute"]','button[aria-label="Mute"]']);
+      setTimeout(syncIcons, 60);
+      close();
+    });
+    document.getElementById('mobileMenuSkip')?.addEventListener('click', ()=>{
+      clickAny(['#btnSkip','#skipBtn','.btn-skip','button[title="Skip"]','button[aria-label="Skip"]']);
+      setTimeout(syncIcons, 60);
+      close();
+    });
+    document.getElementById('mobileMenuReset')?.addEventListener('click', ()=>{
+      clickAny(['#btnReset','#resetBtn','#restartBtn','.btn-reset','button[title="Reset"]','button[aria-label="Reset"]']);
+      close();
+    });
+
+    // Copy icons from original buttons so visuals match (if they are icon-only)
+    try{
+      const srcMute = document.querySelector('#muteBtn, #btnMute, .btn-mute, button[title="Mute"], button[aria-label="Mute"]');
+      const srcSkip = document.querySelector('#skipBtn, #btnSkip, .btn-skip, button[title="Skip"], button[aria-label="Skip"]');
+      const m = document.getElementById('mobileMenuMute');
+      const k = document.getElementById('mobileMenuSkip');
+      if(srcMute && m) m.innerHTML = srcMute.innerHTML;
+      if(srcSkip && k) k.innerHTML = srcSkip.innerHTML;
+    }catch(e){}
+
+    // Start closed
+    close();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init, {once:true});
+  }else{
+    init();
+  }
 })();
 </script>
 
