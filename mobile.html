@@ -758,30 +758,34 @@ button{
   position: fixed;
   left: var(--mSafeL);
   right: var(--mSafeR);
-  bottom: calc(var(--mControlsH) + var(--mSafeBot));
-  height: var(--mMsgBarH);
-  padding: 0 12px;
-  background: linear-gradient(180deg, rgba(10,14,18,0.70), rgba(10,14,18,0.92));
-  border-top: 1px solid rgba(255,255,255,0.06);
-  border-bottom: 1px solid rgba(255,255,255,0.10);
-  z-index: 9998;
+  bottom: calc(var(--mControlsH) + var(--mSafeBot) + 6px);
+  height: calc(var(--mMsgBarH) + 14px);
+  padding: 6px 12px 6px 12px;
+  background: rgba(10,14,18,0.22);
+  border: 1px solid rgba(130,190,210,0.18);
+  border-left: none;
+  border-right: none;
+  z-index: 10000; /* above mobile controls */
   display:flex;
   align-items:center;
   overflow:hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  pointer-events:auto;
+  pointer-events:none; /* never steal taps near controls */
   touch-action:none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 #mobileMsgText{
   width: 100%;
-  color: rgba(240, 240, 240, 0.86);
+  color: rgba(245, 248, 255, 0.92);
   font-size: 13px;
   letter-spacing: 0.2px;
-  text-shadow: 0 1px 0 rgba(0,0,0,0.70);
+  text-shadow: 0 2px 10px rgba(0,0,0,0.75);
   overflow:hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 @media (max-width: 980px){
@@ -1482,6 +1486,69 @@ button{
 @media (max-width: 980px){
   /* optional: if we can detect mute via body class, tint the menu mute button slightly */
   #mobileMenuMute.is-on{ filter: brightness(1.05) saturate(1.05); }
+}
+
+
+/* --- Mobile messages: expand/collapse last 5 --- */
+@media (max-width: 980px){
+  #mobileMsgBar{ pointer-events: auto; }
+  #mobileMsgText{ padding-right: 32px; }
+
+  .mobile-msg-toggle{
+    position:absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    border: 1px solid rgba(130,190,210,0.22);
+    background: rgba(15,25,32,0.10);
+    color: rgba(245,248,255,0.85);
+    font-size: 14px;
+    line-height: 1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow: 0 8px 20px rgba(0,0,0,.25);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    touch-action: manipulation;
+  }
+
+  .mobile-msg-panel{
+    position: fixed;
+    left: var(--mSafeL);
+    right: var(--mSafeR);
+    bottom: calc(var(--mControlsH) + var(--mSafeBot) + 6px + (var(--mMsgBarH) + 14px));
+    z-index: 9999;
+    display:none;
+    pointer-events:auto;
+  }
+  .mobile-msg-panel.open{
+    display:block;
+    animation: ddPopIn 160ms ease-out both;
+  }
+
+  .mobile-msg-panel-inner{
+    border-radius: 12px;
+    border: 1px solid rgba(130,190,210,0.18);
+    background: rgba(10,14,18,0.22);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 8px 10px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.45);
+  }
+
+  .mobile-msg-line{
+    color: rgba(245,248,255,0.90);
+    font-size: 13px;
+    line-height: 1.25;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.75);
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(130,190,210,0.10);
+  }
+  .mobile-msg-line:last-child{ border-bottom:none; }
 }
 
 </style>
@@ -10271,7 +10338,13 @@ function spendGoldWithCGoldFirst(cost){
 <!-- ============================================================
      MOBILE MESSAGE BAR (Prototype 1)
      ============================================================ -->
-<div id="mobileMsgBar" aria-label="Latest message"><span id="mobileMsgText"></span></div>
+<div id="mobileMsgBar" aria-label="Messages">
+  <div id="mobileMsgText"></div>
+  <button id="mobileMsgToggle" class="mobile-msg-toggle" aria-label="Expand messages" title="Expand">▴</button>
+</div>
+<div id="mobileMsgPanel" class="mobile-msg-panel" aria-hidden="true">
+  <div class="mobile-msg-panel-inner" id="mobileMsgList"></div>
+</div>
 
 <!-- ============================================================
      MOBILE CONTROLS (Prototype 1)
@@ -10700,6 +10773,119 @@ document.getElementById('mobileMenuMute')?.addEventListener('click', ()=>{
     }catch(e){}
 
     // Start closed
+    close();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init, {once:true});
+  }else{
+    init();
+  }
+})();
+</script>
+
+
+<script>
+// --- Mobile message expand/collapse (last 5) ---
+(function(){
+  function init(){
+    const bar = document.getElementById('mobileMsgBar');
+    const toggleBtn = document.getElementById('mobileMsgToggle');
+    const panel = document.getElementById('mobileMsgPanel');
+    const list = document.getElementById('mobileMsgList');
+    const textEl = document.getElementById('mobileMsgText');
+    if(!bar || !toggleBtn || !panel || !list || !textEl) return;
+
+    let expanded = false;
+
+    function findLogEl(){
+      return document.getElementById('log')
+        || document.querySelector('#log')
+        || document.querySelector('.panel.log #log')
+        || null;
+    }
+
+    function getAllLines(){
+      const log = findLogEl();
+      if(!log) return [];
+      // If log has child elements, use them; else fall back to text split.
+      const kids = Array.from(log.children || []);
+      let lines = [];
+      if(kids.length){
+        for(const k of kids){
+          const t = (k.textContent || '').trim();
+          if(t) lines.push(t);
+        }
+      }else{
+        const raw = (log.textContent || '').trim();
+        if(raw) lines = raw.split('\n').map(s=>s.trim()).filter(Boolean);
+      }
+      // De-dupe consecutive duplicates
+      const out = [];
+      for(const t of lines){
+        if(!out.length || out[out.length-1] !== t) out.push(t);
+      }
+      return out;
+    }
+
+    function renderLast5(){
+      const lines = getAllLines();
+      const last = lines.slice(-5);
+      list.innerHTML = last.map(t=>`<div class="mobile-msg-line">${escapeHtml(t)}</div>`).join('') || '<div class="mobile-msg-line">—</div>';
+    }
+
+    function escapeHtml(str){
+      return str
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;');
+    }
+
+    function open(){
+      expanded = true;
+      renderLast5();
+      panel.classList.add('open');
+      panel.setAttribute('aria-hidden','false');
+      toggleBtn.textContent = '▾';
+      toggleBtn.title = 'Collapse';
+      toggleBtn.setAttribute('aria-label','Collapse messages');
+    }
+    function close(){
+      expanded = false;
+      panel.classList.remove('open');
+      panel.setAttribute('aria-hidden','true');
+      toggleBtn.textContent = '▴';
+      toggleBtn.title = 'Expand';
+      toggleBtn.setAttribute('aria-label','Expand messages');
+    }
+    function toggle(){ expanded ? close() : open(); }
+
+    // Click toggle (button or bar)
+    toggleBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); toggle(); }, {passive:false});
+    bar.addEventListener('click', (e)=>{
+      // only toggle if click isn't on the movement controls (bar is above them)
+      if(e.target === toggleBtn) return;
+      toggle();
+    }, {passive:true});
+
+    // Close when tapping outside (only when expanded)
+    document.addEventListener('pointerdown', (e)=>{
+      if(!expanded) return;
+      const t = e.target;
+      if(panel.contains(t) || bar.contains(t)) return;
+      close();
+    }, {passive:true});
+
+    // Keep panel fresh as new messages arrive
+    const log = findLogEl();
+    if(log){
+      const mo = new MutationObserver(()=>{
+        if(expanded) renderLast5();
+      });
+      mo.observe(log, {childList:true, subtree:true, characterData:true});
+    }
+
+    // Start collapsed
     close();
   }
 
