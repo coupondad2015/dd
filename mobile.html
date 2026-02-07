@@ -4433,10 +4433,16 @@ setMuted(uiMuted);
     pickup_relic:  { src: "sfx_pickup_relic.wav",    vol: 0.80 },
     pickup_shrine: { src: "sfx_pickup_shrine.wav",   vol: 0.80 },
 
+    torch_pickup:   { src: "sfx_torch_pickup.wav",          vol: 0.45 },
+    torch_light:    { src: "sfx_torch_light.wav",           vol: 0.55 },
+    trap_trigger:   { src: "sfx_trap_trigger.wav",       vol: 0.60, fallback: ["sfx_damage_trap.wav"] },
+
     // Consumables / combat
     drink:    { src: "sfx_drink.wav",                vol: 0.65 }, // was a bit quiet
     attack:   { src: "sfx_attack.wav",               vol: 0.42 }, // was too loud
     damage:   { src: "sfx_damage.wav",               vol: 0.65 },
+    player_death:{ src: "sfx_player_death.wav",       vol: 0.90 },
+    game_start: { src: "sfx_game_start.wav",        vol: 0.75 },
     death_monster:{ src:"sfx_death_monster.wav",     vol: 0.60 },
 
     // Doors / transitions
@@ -4469,12 +4475,28 @@ setMuted(uiMuted);
       sfxMasterGain.connect(sfxCtx.destination);
 
       const entries = Object.entries(SFX_DEFS);
+
+      // Load each SFX independently so a single missing/corrupt file doesn't disable all SFX.
       for(const [name, def] of entries){
-        const primary = resolveAsset("sfx", def.src);
-        const resp = await fetchWithFallback([primary, def.src], { cache: "no-store" });
-        const arr = await resp.arrayBuffer();
-        const buf = await sfxCtx.decodeAudioData(arr);
-        sfxBuffers[name] = buf;
+        try{
+          const primary = resolveAsset("sfx", def.src);
+
+          // Optional per-SFX fallback filenames (keeps older builds compatible)
+          const fb = Array.isArray(def.fallback) ? def.fallback : [];
+          const urlList = [primary, def.src];
+          for(const f of fb){
+            try{ urlList.push(resolveAsset("sfx", f)); }catch(_){ }
+            urlList.push(f);
+          }
+
+          const resp = await fetchWithFallback(urlList, { cache: "no-store" });
+          const arr = await resp.arrayBuffer();
+          const buf = await sfxCtx.decodeAudioData(arr);
+          sfxBuffers[name] = buf;
+        }catch(e){
+          console.warn("SFX failed to load:", name, def?.src, e);
+          sfxBuffers[name] = null;
+        }
       }
       sfxReady = true;
     }catch(e){
@@ -4763,6 +4785,7 @@ function weightedChoice(items, weights){
   let CHAOS_ID = 1;
 
   function newGame(){
+    try{ playSfx('game_start'); }catch(_){ }
     game = {
       ndUsed: false,
       depth: 1,
@@ -4964,6 +4987,7 @@ function endGameLose(){
 
     game.ended = true;
     game.victory = false;
+    try{ playSfx('player_death'); }catch(_){ }
     logMsg("Defeat — the depths claim another explorer.");
     logMsg("Reset to try again.");
     renderAll(true);
@@ -5644,6 +5668,7 @@ function currentVisionRadius(){
     if(game.inv.torches <= 0) return;
     game.inv.torches--;
     startNewTorchBurn();
+    playSfx('torch_light');
     logMsg("A torch flares to life. The darkness retreats.");
   }
 
@@ -9957,6 +9982,8 @@ if(!__wasInBlackout && __nowInBlackout){
       const tr = lvl.traps.get(mk);
       tr.revealed = true;
 
+      playSfx('trap_trigger');
+
       if(hasInvincible()){
         logMsg("A trap triggers — but you are invincible.");
       } else if(hasTransmute()){
@@ -10094,6 +10121,7 @@ if(_hadWeapon) game.weaponUpgradeCount++;
           logMsg(`Torch pack full (cap ${TORCH_CAP}). Left torch behind.`);
         } else {
           game.inv.torches += take;
+          playSfx('torch_pickup');
           logMsg(take === 1 ? "Picked up a torch (t)." : `Picked up ${take} torches (t).`);
 
           if(take >= cnt){
