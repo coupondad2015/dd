@@ -4417,41 +4417,26 @@ setMuted(uiMuted);
   const SFX_MASTER = 0.55; // global SFX loudness (0..1)
 
   const SFX_DEFS = {
-    // Movement
-    step:             { src: "sfx_step.wav",                 vol: 0.28 }, // was a touch hot
-    step_corpsefield: { src: "sfx_step_corpsefield.wav",     vol: 0.45 },
+    step:             { src: "sfx_step.wav",                 vol: 0.35 },
+    step_corpsefield: { src: "sfx_step_corpsefield.wav",     vol: 0.55 },
 
-    // Core interactions
-    bump:     { src: "sfx_wall_bump.wav",            vol: 0.50 },
-    locked_bump:{ src:"sfx_locked_bump.wav",         vol: 0.45 },
-
-    // Pickups (semantic)
-    pickup:        { src: "sfx_pickup.wav",          vol: 0.50 }, // fallback / generic
-    pickup_chest:  { src: "sfx_pickup_chest.wav",    vol: 0.70 },
-    pickup_potion: { src: "sfx_pickup_potion.wav",   vol: 0.55 },
-    pickup_scroll: { src: "sfx_pickup_scroll.wav",   vol: 0.55 },
-    pickup_relic:  { src: "sfx_pickup_relic.wav",    vol: 0.80 },
-    pickup_shrine: { src: "sfx_pickup_shrine.wav",   vol: 0.80 },
-
-    // Consumables / combat
-    drink:    { src: "sfx_drink.wav",                vol: 0.65 }, // was a bit quiet
-    attack:   { src: "sfx_attack.wav",               vol: 0.42 }, // was too loud
-    damage:   { src: "sfx_damage.wav",               vol: 0.65 },
-    death_monster:{ src:"sfx_death_monster.wav",     vol: 0.60 },
+    bump:     { src: "sfx_wall_bump.wav",            vol: 0.55 },
+    pickup:   { src: "sfx_pickup.wav",               vol: 0.55 },
+    drink:    { src: "sfx_drink.wav",                vol: 0.50 },
+    attack:   { src: "sfx_attack.wav",               vol: 0.60 },
+    damage:   { src: "sfx_damage.wav",               vol: 0.70 },
 
     // Doors / transitions
-    door_open:     { src: "sfx_door_open.wav",       vol: 0.55 },
+    door_open:     { src: "sfx_door_open.wav",       vol: 0.65 },
     door_break:    { src: "sfx_door_break.wav",      vol: 0.75 },
-    door_secret:   { src: "sfx_door_secret.wav",     vol: 0.60 },
-    door_key_open: { src: "sfx_door_key_open.wav",   vol: 0.60 },
-    cave_opening:  { src: "sfx_cave_opening.wav",    vol: 0.65 },
-
-    descend:  { src: "sfx_descend.wav",              vol: 0.60 },
+    door_secret:   { src: "sfx_door_secret.wav",     vol: 0.65 },
+    door_key_open: { src: "sfx_door_key_open.wav",   vol: 0.65 },
+    cave_opening:  { src: "sfx_cave_opening.wav",    vol: 0.70 },
     descent_secret:{ src: "sfx_descent_secret.wav",  vol: 0.70 },
 
-    wait:     { src: "sfx_wait.wav",                 vol: 0.26 },
+    descend:  { src: "sfx_descend.wav",              vol: 0.60 },
+    wait:     { src: "sfx_wait.wav",                 vol: 0.30 },
 
-    // Boss
     mtn_trial:{ src: "sfx_boss_mountain_trial.wav",  vol: 1.00 },
     mtn_fall: { src: "sfx_boss_mountain_death.wav",  vol: 1.00 }
   };
@@ -8647,8 +8632,7 @@ else {
   function resolveChaosRelic(accepted){
     if(!accepted) return;
     game.relicJustClaimed = true;
-    
-    playSfx('pickup_relic');const lvl = getLevel(game.depth);
+    const lvl = getLevel(game.depth);
     const p = lvl.player;
     resolveChaosRelicAt(p.x, p.y);
   }
@@ -8743,9 +8727,7 @@ function resolveShrineAt(x, y){
 
     lvl.items.delete(k);
 
-    
-
-    playSfx('pickup_shrine');if(game.hpMax >= MAX_HP_CAP){
+    if(game.hpMax >= MAX_HP_CAP){
       logMsg("The shrine is dormant. You feel no further growth is possible.");
       logMsg("Shrine vanishes.");
       return;
@@ -9073,9 +9055,6 @@ function roomPassableInteriorCount(lvl, r){
   }catch(_e){}
 }, 700);
       }
-      // SFX: generic monster death (skip Mountain boss/shards which have dedicated cues)
-      try{ if(m && !(typeof isMountainBossGlyph==='function' && isMountainBossGlyph(m.glyph)) && !(typeof isMountainShardGlyph==='function' && isMountainShardGlyph(m.glyph))) playSfx('death_monster'); }catch(_e){}
-
 
       lvl.monsters.delete(k);
 
@@ -9535,8 +9514,7 @@ if(dx===0 && dy===0) continue;
 
     if(t === TILE.DOOR_C){
       setTileWithAnim(lvl, x, y, TILE.DOOR_O, "open");
-      
-      playSfx('door_open');playSfx("door_open");
+      playSfx("door_open");
       if(!lvl.openedDoorMsgShown){ logMsg("Opened a door."); lvl.openedDoorMsgShown = true; }
       return true;
     }
@@ -9550,8 +9528,7 @@ if(dx===0 && dy===0) continue;
       if(game.inv.keys <= 0){
         if(LOCKED_DOOR_BREAKS_WITHOUT_KEY){
           setTileWithAnim(lvl, x, y, TILE.LDOOR_O, "forced_open");
-          
-          playSfx('door_break');playSfx("door_break");
+          playSfx("door_break");
           if(hasInvincible()){
             logMsg("No key — forced the lock. It shatters harmlessly.");
           } else if(LOCK_BREAK_DAMAGE > 0){
@@ -9567,32 +9544,28 @@ if(dx===0 && dy===0) continue;
           }
         } else {
           logMsg("Locked. A key is needed.");
-          
-          playSfx('locked_bump');try{ startTileAnim(x, y, "locked_bump", 1200); startTileAnim(x, y, "spark", 700); }catch(_){}
+          try{ startTileAnim(x, y, "locked_bump", 1200); startTileAnim(x, y, "spark", 700); }catch(_){}
         }
         return true;
       }
 
       game.inv.keys--;
       setTileWithAnim(lvl, x, y, TILE.LDOOR_O, "forced_open");
-      
-      playSfx('door_key_open');playSfx("door_key_open");
+      playSfx("door_key_open");
       logMsg("Unlocked and opened the door.");
       return true;
     }
 
     if(t === TILE.SD_C){
       setTileWithAnim(lvl, x, y, TILE.SD_O, "secret_open");
-      
-      playSfx('door_secret');playSfx("door_secret");
+      playSfx("door_secret");
       logMsg("Opened a secret door.");
       return true;
     }
 
     if(t === TILE.CAVE_C){
       setTileWithAnim(lvl, x, y, TILE.CAVE_O, "secret_open");
-      
-      playSfx('cave_opening');playSfx("cave_opening");
+      playSfx("cave_opening");
       logMsg("The damp darkness closes around you.");
       return true;
     }
@@ -9990,13 +9963,13 @@ if(!__wasInBlackout && __nowInBlackout){
           try{ if(typeof window.DD_bumpPotionCount==='function'){ window.DD_bumpPotionCount(it.potion || POTION.HEAL, +1); } }catch(_){ }
 
           try{ refreshWheelCounts(); }catch(_){ }
-          playSfx('pickup_potion');
+          playSfx('pickup');
           logMsg(`Picked up a ${POTION_NAME[it.potion || POTION.HEAL]} potion (!).`);
           lvl.items.delete(mk);
         }
       }
       else if(SCROLL_COLOR[it.type]){ // scroll glyph item (auto-read on pickup)
-        playSfx('pickup_scroll');
+        playSfx('pickup');
         const nm = SCROLL_NAME[it.type] || 'Mystery';
         if(it.type === "☼"){ // Illumination
           // In caves, Illumination creates a stationary glow (anchor light) until level change.
@@ -10061,7 +10034,7 @@ else if(it.type === ENT.CHEST){
         } else {
           logMsg(`Found treasure ($): +${gold + cgold} gold.${cgold>0 ? ' Some of the coin is stained.' : ''}`);
         }
-        playSfx('pickup_chest');
+        playSfx('pickup');
         lvl.items.delete(mk);
       } else if(it.type === ENT.WEAPON){
         // Defensive: weapon items may be malformed (e.g., post-defeat drops). Never let that break rendering.
