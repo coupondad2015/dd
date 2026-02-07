@@ -4417,15 +4417,27 @@ setMuted(uiMuted);
   const SFX_MASTER = 0.55; // global SFX loudness (0..1)
 
   const SFX_DEFS = {
-    step:     { src: "sfx_step.wav",                 vol: 0.35 },
+    step:             { src: "sfx_step.wav",                 vol: 0.35 },
+    step_corpsefield: { src: "sfx_step_corpsefield.wav",     vol: 0.55 },
+
     bump:     { src: "sfx_wall_bump.wav",            vol: 0.55 },
     pickup:   { src: "sfx_pickup.wav",               vol: 0.55 },
     drink:    { src: "sfx_drink.wav",                vol: 0.50 },
     attack:   { src: "sfx_attack.wav",               vol: 0.60 },
     damage:   { src: "sfx_damage.wav",               vol: 0.70 },
+
+    // Doors / transitions
+    door_open:     { src: "sfx_door_open.wav",       vol: 0.65 },
+    door_break:    { src: "sfx_door_break.wav",      vol: 0.75 },
+    door_secret:   { src: "sfx_door_secret.wav",     vol: 0.65 },
+    door_key_open: { src: "sfx_door_key_open.wav",   vol: 0.65 },
+    cave_opening:  { src: "sfx_cave_opening.wav",    vol: 0.70 },
+    descent_secret:{ src: "sfx_descent_secret.wav",  vol: 0.70 },
+
     descend:  { src: "sfx_descend.wav",              vol: 0.60 },
     wait:     { src: "sfx_wait.wav",                 vol: 0.30 },
-    mtn_trial:{ src: "sfx_boss_mountain_trial.wav", vol: 1.00 },
+
+    mtn_trial:{ src: "sfx_boss_mountain_trial.wav",  vol: 1.00 },
     mtn_fall: { src: "sfx_boss_mountain_death.wav",  vol: 1.00 }
   };
 
@@ -9502,6 +9514,7 @@ if(dx===0 && dy===0) continue;
 
     if(t === TILE.DOOR_C){
       setTileWithAnim(lvl, x, y, TILE.DOOR_O, "open");
+      playSfx("door_open");
       if(!lvl.openedDoorMsgShown){ logMsg("Opened a door."); lvl.openedDoorMsgShown = true; }
       return true;
     }
@@ -9515,6 +9528,7 @@ if(dx===0 && dy===0) continue;
       if(game.inv.keys <= 0){
         if(LOCKED_DOOR_BREAKS_WITHOUT_KEY){
           setTileWithAnim(lvl, x, y, TILE.LDOOR_O, "forced_open");
+          playSfx("door_break");
           if(hasInvincible()){
             logMsg("No key — forced the lock. It shatters harmlessly.");
           } else if(LOCK_BREAK_DAMAGE > 0){
@@ -9537,18 +9551,21 @@ if(dx===0 && dy===0) continue;
 
       game.inv.keys--;
       setTileWithAnim(lvl, x, y, TILE.LDOOR_O, "forced_open");
+      playSfx("door_key_open");
       logMsg("Unlocked and opened the door.");
       return true;
     }
 
     if(t === TILE.SD_C){
       setTileWithAnim(lvl, x, y, TILE.SD_O, "secret_open");
+      playSfx("door_secret");
       logMsg("Opened a secret door.");
       return true;
     }
 
     if(t === TILE.CAVE_C){
       setTileWithAnim(lvl, x, y, TILE.CAVE_O, "secret_open");
+      playSfx("cave_opening");
       logMsg("The damp darkness closes around you.");
       return true;
     }
@@ -9798,6 +9815,7 @@ if(game.nd && (dx !== 0 || dy !== 0)){
     if(steppingOnCorpse){
       if(!game.corpseWait){
         game.corpseWait = true;
+        playSfx('step_corpsefield');
 
         // One lore message per tier per floor (no spam). Field can still appear later.
         // Less conservative: count corpses in a 5×5 area (radius 2) around the step target.
@@ -10102,8 +10120,7 @@ if(_hadWeapon) game.weaponUpgradeCount++;
 
     const nextDepth = game.depth + 1;
     loadLevel(nextDepth);
-    playSfx('descend');
-    playSfx('descend');
+    playSfx(t === TILE.SDOWN ? 'descent_secret' : 'descend');
 
     // Music: descending interlude
     musicMaybeTrigger('descend', true);
