@@ -1062,6 +1062,16 @@ button{
   box-shadow: 0 0 14px rgba(200,200,200,0.10);
   opacity: 0.85;
 }
+
+/* Wheel action buttons (WAIT / DESCEND): read as buttons, not potions */
+#mobileControls .wheelItem.action{
+  background: rgba(20,30,36,.85);
+  border: 2px solid rgba(180,200,220,.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 4px 12px rgba(0,0,0,.55);
+}
+#mobileControls .wheelItem.action::after{ display:none; }
 #mobileControls .pGlyph, #mobileControls .aGlyph{
   position:relative;
   z-index: 2;
@@ -1073,9 +1083,8 @@ button{
 }
 #mobileControls .pCount{
   position:absolute;
-  right: 3px;
-  bottom: 2px;
-  min-width: 18px;
+  left: 50%;top: -8px;
+  transform: translateX(-50%); min-width: 18px;
   height: 16px;
   padding: 0 5px;
   border-radius: 999px;
@@ -4381,6 +4390,9 @@ function weightedChoice(items, weights){
     const idx = inv.indexOf(type);
     if(idx === -1) return false;
     inv.splice(idx, 1);
+    try{ if(typeof window.DD_bumpPotionCount==='function'){ window.DD_bumpPotionCount(type, -1); } }catch(_){ }
+
+    try{ refreshWheelCounts(); }catch(_){}
     return true;
   }
 
@@ -4406,6 +4418,7 @@ function weightedChoice(items, weights){
     for(const [type, n] of Object.entries(target)){
       for(let i=0;i<n;i++) game.inv.potions.push(type);
     }
+    try{ refreshWheelCounts(); }catch(_){ }
   }
 
 
@@ -4422,6 +4435,46 @@ function weightedChoice(items, weights){
     }
     return counts;
   }
+
+
+  // Expose potion counts for the mobile wheel (UI-only; renderer-safe)
+  // Wheel mapping: 0=Poison, 1=Invis, 2=Transmute, 3=Invinc, 4=Tele
+  window.DD_getPotionCounts = function(){
+    try{
+      const byType = countPotionsByType();
+      return [
+        byType[POTION.POISON]||0,
+        byType[POTION.INVIS]||0,
+        byType[POTION.TRANSMUTE]||0,
+        byType[POTION.INVINC]||0,
+        byType[POTION.TELE]||0
+      ];
+    }catch(_){
+      return [0,0,0,0,0];
+    }
+  };
+
+  // Fast incremental updates (used on pickup/consume so wheel updates instantly if open)
+  window.DD_bumpPotionCount = function(type, delta){
+    try{
+      const map = {
+        [POTION.POISON]: 0,
+        [POTION.INVIS]: 1,
+        [POTION.TRANSMUTE]: 2,
+        [POTION.INVINC]: 3,
+        [POTION.TELE]: 4
+      };
+      if(!(type in map)) return;
+      const wheel = document.getElementById("mWheel");
+      if(!wheel) return;
+      const idx = map[type];
+      const badge = wheel.querySelector(`.wheelItem.potion[data-pot="${idx}"] .pCount`);
+      if(!badge) return;
+      const cur = parseInt((badge.textContent||"0").trim(), 10) || 0;
+      const next = Math.max(0, cur + (delta|0));
+      badge.textContent = String(next);
+    }catch(_){}
+  };
 
   function makeGrid(w,h, fill){
     const g = new Array(w);
@@ -4494,6 +4547,7 @@ function weightedChoice(items, weights){
 
     // Default starting supplies
     for(let i=0;i<DEFAULT_HEAL_POTIONS;i++) game.inv.potions.push(POTION.HEAL);
+    try{ refreshWheelCounts(); }catch(_){ }
     if(DEBUG){
       debugFillPotions();
       logMsg("DEBUG: Potion belt filled for testing.");
@@ -4778,6 +4832,8 @@ function endGameLose(){
     }
     const potion = chance(0.60) ? POTION.HEAL : rollPotionType(game.depth);
     game.inv.potions.push(potion);
+    try{ refreshWheelCounts(); }catch(_){ }
+    try{ refreshWheelCounts(); }catch(_){ }
     logMsg(`Bought a ${POTION_NAME[potion]} potion for ${TRADER_POTION_COST}g.${__usedC>0 ? (' (spent ' + __usedC + ' blood-gold and ' + __usedG + ' gold).') : ''}`);
     if(__usedC>0 && (game.cgold||0) === 0){ logMsg('The last of the tainted coin leaves your purse.'); }
   }
@@ -4930,7 +4986,10 @@ function renderMessages(){
     game.msg.unshift({ text, type });
     game.msg = game.msg.slice(0, 7);
     renderMessages();
-  }
+  
+    // If the mobile wheel is open, keep potion badges live (pickup/use messages flow through here)
+    try{ if(typeof refreshWheelCounts==="function" && wheel && wheel.classList.contains("open")) refreshWheelCounts(); }catch(_){}
+}
 
 // ---------- LORE (run-persistent, non-blocking) ----------
 function initLore(){
@@ -8290,6 +8349,7 @@ else {
       game.gold -= p.costPotion;
       const potion = chance(0.60) ? POTION.HEAL : rollPotionType(game.depth);
       game.inv.potions.push(potion);
+    try{ refreshWheelCounts(); }catch(_){ }
       logMsg(`Bought a ${POTION_NAME[potion]} potion for ${p.costPotion}g.`);
       clearPrompt();
       return;
@@ -9637,6 +9697,9 @@ if(!__wasInBlackout && __nowInBlackout){
           logMsg(`Potion satchel full (cap ${POTION_CAP}). Left potion behind.`);
         } else {
           game.inv.potions.push(it.potion || POTION.HEAL);
+          try{ if(typeof window.DD_bumpPotionCount==='function'){ window.DD_bumpPotionCount(it.potion || POTION.HEAL, +1); } }catch(_){ }
+
+          try{ refreshWheelCounts(); }catch(_){ }
           playSfx('pickup');
           logMsg(`Picked up a ${POTION_NAME[it.potion || POTION.HEAL]} potion (!).`);
           lvl.items.delete(mk);
@@ -10514,28 +10577,72 @@ function spendGoldWithCGoldFirst(cost){
 
   function dispatchKey(k){
     // Feed the existing v218 key pipeline *once*.
-    // Dispatching to window+document+body can cause duplicate moves if the game listens in multiple places.
+    // Some handlers key off `code`/`keyCode` for punctuation (e.g. '.' wait),
+    // so we provide a small mapping for the keys we synthesize.
+    const map = (key)=>{
+      // Default best-effort
+      const out = { key, code: "", keyCode: 0, which: 0 };
+      // Digits 0-9
+      if(/^[0-9]$/.test(key)){
+        out.code = "Digit" + key;
+        out.keyCode = out.which = 48 + (key.charCodeAt(0) - 48);
+        return out;
+      }
+      // Lowercase letters we use
+      if(/^[a-z]$/.test(key)){
+        out.code = "Key" + key.toUpperCase();
+        out.keyCode = out.which = key.toUpperCase().charCodeAt(0);
+        return out;
+      }
+      // Punctuation / specials used by the game
+      if(key === "."){
+        out.code = "Period";
+        out.keyCode = out.which = 190;
+        return out;
+      }
+      if(key === ">"){
+        out.code = "Period"; // same physical key as '.'
+        out.keyCode = out.which = 190;
+        return out;
+      }
+      return out;
+    };
+
+    const m = map(k);
+
     try{
       const screen = document.getElementById("screen");
+      const target = screen || window;
+
+      // Prefer focusing the game screen when available
       if(screen){
         if(!screen.hasAttribute("tabindex")) screen.tabIndex = -1;
-        try{ screen.focus({ preventScroll:true }); }catch(_){ screen.focus(); }
-        const ev = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
-        screen.dispatchEvent(ev);
-      }else{
-        const ev = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
-        window.dispatchEvent(ev);
+        try{ screen.focus({ preventScroll:true }); }catch(_){ try{ screen.focus(); }catch(__){} }
       }
+
+      // Dispatch both keydown + keypress for maximum compatibility (some builds listen to keypress for '.')
+      const common = { key: m.key, code: m.code, bubbles: true, cancelable: true };
+      const evDown = new KeyboardEvent("keydown", common);
+      const evPress = new KeyboardEvent("keypress", common);
+      Object.defineProperty(evDown, "keyCode", { get: ()=>m.keyCode });
+      Object.defineProperty(evDown, "which",   { get: ()=>m.which });
+      Object.defineProperty(evPress,"keyCode", { get: ()=>m.keyCode });
+      Object.defineProperty(evPress,"which",   { get: ()=>m.which });
+
+      target.dispatchEvent(evDown);
+      target.dispatchEvent(evPress);
     }catch(e){
       // Last resort: older browsers / restricted KeyboardEvent construction
       try{
         const evt = document.createEvent("Event");
         evt.initEvent("keydown", true, true);
-        evt.key = k;
+        evt.key = m.key;
+        evt.code = m.code;
         window.dispatchEvent(evt);
       }catch(_){}
     }
   }
+
 const repeat = { timer:null, interval:null, key:null, down:false, downTs:0, initialDelayMs:330, repeatMs:95 };
   function clearRepeat(){
     if(repeat.timer){ clearTimeout(repeat.timer); repeat.timer=null; }
@@ -10586,27 +10693,22 @@ const repeat = { timer:null, interval:null, key:null, down:false, downTs:0, init
     wheel.classList.remove("open");
     healHold.opened = false;
   }
-  function openWheel(){
+  function refreshWheelCounts(){
     if(!wheel) return;
+    let counts = null;
 
-    // Depth hue: read from v218 game state if available
-    let depth = 1;
-    try{ if(window.game && Number.isFinite(window.game.depth)) depth = window.game.depth; }catch(_){}
-    const base = 200, span = 75;
-    const hue = base + ((Math.max(1, depth) - 1) % 20) * (span / 19);
-    root.style.setProperty("--mWheelHue", String(Math.round(hue)));
-
-    // Counts: pull from v218 inventory if present (fallback to 0)
-    const counts = [0,0,0,0,0];
+    // Preferred path: ask the core game for authoritative counts
     try{
-      const inv = (window.game && window.game.inv) ? window.game.inv : null;
-      if(inv && Array.isArray(inv.potionsByType)){
-        // if you ever store an indexed array later, this will auto-wire
-        for(let i=0;i<5;i++) counts[i] = inv.potionsByType[i] || 0;
-      }else if(inv){
-        // v218 appears to track by named types; keep graceful (0 badges if unknown)
+      if(typeof window.DD_getPotionCounts === "function"){
+        const c = window.DD_getPotionCounts();
+        if(Array.isArray(c) && c.length >= 5) counts = c.slice(0,5);
       }
     }catch(_){}
+
+    if(!counts){
+      // Safe default
+      counts = [0,0,0,0,0];
+    }
 
     wheel.querySelectorAll(".wheelItem.potion").forEach(btn=>{
       const i = parseInt(btn.dataset.pot||"0", 10);
@@ -10614,6 +10716,19 @@ const repeat = { timer:null, interval:null, key:null, down:false, downTs:0, init
       const badge = btn.querySelector(".pCount");
       if(badge) badge.textContent = String(n);
     });
+  }
+
+  function openWheel(){
+    if(!wheel) return;
+
+    // Depth hue: read from v218 game state if available
+    let depth = 1;
+    try{ const g = (typeof game !== "undefined" && game) ? game : window.game; if(g && Number.isFinite(g.depth)) depth = g.depth; }catch(_){}
+    const base = 200, span = 75;
+    const hue = base + ((Math.max(1, depth) - 1) % 20) * (span / 19);
+    root.style.setProperty("--mWheelHue", String(Math.round(hue)));
+
+    refreshWheelCounts();
 
     wheel.classList.add("open");
     healHold.opened = true;
@@ -10672,9 +10787,20 @@ const repeat = { timer:null, interval:null, key:null, down:false, downTs:0, init
 
   // Wheel item -> key
   if(wheel){
-    // Position items (8-way ring; potions 0..4 + actions)
-    // Angles: start at top (270) and go clockwise
-    const potAngles = { 0: 330, 1: 30, 2: 90, 3: 150, 4: 210 };
+    // Position items (ring; potions 0..4 + actions)
+    // IMPORTANT: Because the CSS transform is:
+    //   rotate(a) -> translateY(-r) -> rotate(-a)
+    // angle 0 is at TOP, 90 is RIGHT, 180 is BOTTOM, 270 is LEFT.
+    // We want clockwise order matching the game: 0 → 1 → 2 → 3 → 4.
+    // Clustered arc: bottom-center → clockwise → top
+    const potAngles = {
+      0: 180, // bottom-center
+      1: 220, // lower-left
+      2: 260, // left
+      3: 300, // upper-left
+      4: 340  // near top
+    };
+
     wheel.querySelectorAll(".wheelItem").forEach(btn=>{
       const pot = btn.dataset.pot;
       const act = btn.dataset.act;
@@ -10695,9 +10821,9 @@ const repeat = { timer:null, interval:null, key:null, down:false, downTs:0, init
           btn.style.setProperty("--glow", liq[1]);
         }
       }else if(act === "WAIT"){
-        ang = 270;
+        ang = 30;   // upper-right cluster
       }else if(act === "DESCEND"){
-        ang = 0;
+        ang = 60;   // upper-right cluster
       }
       btn.dataset.angle = String(ang);
       btn.style.setProperty("--ang", String(ang));
