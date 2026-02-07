@@ -1658,6 +1658,249 @@ button{
   .mobile-msg-line:last-child{ border-bottom:none; }
 }
 
+/* ============================================================
+   UI GLASS + 3D RELIEF SYSTEM (cosmetic-only)
+   Paste near END of <style> to override earlier rules.
+   ============================================================ */
+
+:root{
+  /* Glass token */
+  --glass-bg: rgba(15,25,32,.12);
+  --glass-bg-strong: rgba(15,25,32,.18);
+  --glass-border: rgba(130,190,210,.28);
+  --glass-border-strong: rgba(130,190,210,.42);
+  --glass-blur: 10px;
+
+  /* Relief token */
+  --relief-hi: rgba(255,255,255,.14);   /* top highlight */
+  --relief-lo: rgba(0,0,0,.55);         /* bottom inner shadow */
+  --relief-shadow: rgba(0,0,0,.45);     /* outer shadow */
+  --relief-dropY: 8px;
+  --relief-dropY-pressed: 4px;
+  --relief-pressY: 2px;
+
+  --tap-bright: 1.06;
+}
+
+/* --- GLASS surfaces: panels / floating UI --- */
+.panel,
+#mobileMsgBar .mobile-msg-inner,
+#mobileMsgPanel .mobile-msg-panel-inner,
+.mobile-menu-panel,
+.mobile-menu-btn{
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+  backdrop-filter: blur(var(--glass-blur)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) !important;
+}
+
+/* Slightly stronger for “primary” floaters */
+.mobile-menu-panel,
+#mobileMsgBar .mobile-msg-inner{
+  background: var(--glass-bg-strong) !important;
+  border-color: var(--glass-border-strong) !important;
+}
+
+/* ============================================================
+   3D RELIEF BUTTONS (applies broadly)
+   ============================================================ */
+
+/* Targets: all real buttons + your custom tap targets */
+:is(
+  button,
+  .skip-btn,
+  .mute-btn,
+  .mobile-menu-btn,
+  .mobile-menu-action,
+  #mobileMsgToggle,
+  .mobile-msg-toggle
+){
+  border: 1px solid var(--glass-border) !important;
+  background: var(--glass-bg) !important;
+  color: rgba(230,240,255,.92);
+  box-shadow:
+    inset 0 1px 0 var(--relief-hi),
+    inset 0 -2px 0 rgba(0,0,0,.35),
+    0 var(--relief-dropY) 22px var(--relief-shadow);
+  backdrop-filter: blur(calc(var(--glass-blur) * .7));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * .7));
+  transition: transform 90ms ease, filter 90ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hover/focus feel */
+:is(
+  button,
+  .skip-btn,
+  .mute-btn,
+  .mobile-menu-btn,
+  .mobile-menu-action,
+  #mobileMsgToggle,
+  .mobile-msg-toggle
+):hover{
+  border-color: var(--glass-border-strong) !important;
+  filter: brightness(1.03);
+}
+:is(
+  button,
+  .skip-btn,
+  .mute-btn,
+  .mobile-menu-btn,
+  .mobile-menu-action,
+  #mobileMsgToggle,
+  .mobile-msg-toggle
+):focus-visible{
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 var(--relief-hi),
+    inset 0 -2px 0 rgba(0,0,0,.35),
+    0 var(--relief-dropY) 22px var(--relief-shadow),
+    0 0 0 2px rgba(155,231,255,.18);
+}
+
+/* Press-down behavior (consistent everywhere) */
+:is(
+  button,
+  .skip-btn,
+  .mute-btn,
+  .mobile-menu-btn,
+  .mobile-menu-action,
+  #mobileMsgToggle,
+  .mobile-msg-toggle
+):active{
+  transform: translateY(var(--relief-pressY));
+  filter: brightness(var(--tap-bright));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.10),
+    inset 0 -2px 0 rgba(0,0,0,.45),
+    0 var(--relief-dropY-pressed) 16px rgba(0,0,0,.55);
+}
+
+/* ============================================================
+   Mobile D-Pad & Heal already have strong 3D.
+   We *align* them to the same glass tone, without breaking pressed logic.
+   ============================================================ */
+
+/* D-pad keys: keep your existing box-shadow stack; just tint face slightly glassy */
+#mobileControls .btn{
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255,255,255,.18), rgba(255,255,255,0) 55%),
+    linear-gradient(180deg, rgba(232,225,210,1), rgba(220,213,198,1)) !important;
+}
+
+/* Heal button: add a tiny “rim” relief so it matches the system */
+#mobileControls .heal{
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.18),
+    inset 0 -3px 0 rgba(0,0,0,.22),
+    0 12px 30px rgba(0,0,0,.55) !important;
+}
+
+/* Wheel items: give them the same relief cadence on press */
+#mobileControls .wheelItem:active{
+  transform:
+    rotate(calc(var(--ang) * 1deg))
+    translateY(calc(var(--radius) * -1))
+    rotate(calc(var(--ang) * -1deg))
+    scale(0.98) !important;
+  filter: brightness(1.06);
+}
+
+/* Menu danger button keeps its red identity, but gains relief */
+.mobile-menu-danger{
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.10),
+    inset 0 -2px 0 rgba(0,0,0,.40),
+    0 var(--relief-dropY) 22px rgba(0,0,0,.45) !important;
+}
+.mobile-menu-danger:active{
+  transform: translateY(var(--relief-pressY));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    inset 0 -2px 0 rgba(0,0,0,.50),
+    0 var(--relief-dropY-pressed) 16px rgba(0,0,0,.55) !important;
+}
+
+/* Restore heal potion magenta (override glass system) */
+#mobileControls .heal{
+  background:
+    radial-gradient(circle at 50% 35%, rgba(255,255,255,0.22), rgba(255,255,255,0.05)),
+    linear-gradient(180deg, var(--mHealMagenta), var(--mHealMagentaDark)) !important;
+}
+
+
+/* Popup menu buttons: add real filled faces (must target mobileMenu* IDs) */
+#mobileMenuMute,
+#mobileMenuSkip,
+#mobileMenuReset{
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255,255,255,.12), rgba(255,255,255,0) 55%),
+    linear-gradient(180deg, rgba(34,52,64,.88), rgba(16,24,30,.92)) !important;
+
+  border-color: rgba(130,190,210,.55) !important;
+}
+
+/* Keep Reset “danger”, but still filled */
+#mobileMenuReset{
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255,255,255,.10), rgba(255,255,255,0) 55%),
+    linear-gradient(180deg, rgba(120,35,35,.35), rgba(60,18,18,.45)) !important;
+
+  border-color: rgba(230,120,120,.45) !important;
+}
+
+/* Optional: hover/press read */
+#mobileMenuMute:active,
+#mobileMenuSkip:active,
+#mobileMenuReset:active{
+  filter: brightness(1.06);
+}
+
+/* ============================================================
+   Popup shading pass (menus + message panel)
+   Cosmetic only — additive
+   ============================================================ */
+
+/* Hamburger popout menu panel */
+.mobile-menu-panel{
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,.04), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, rgba(12,18,24,.72), rgba(6,10,14,.82)) !important;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 24px 60px rgba(0,0,0,.65) !important;
+}
+
+/* Popup menu buttons already filled — deepen contrast slightly */
+#mobileMenuMute,
+#mobileMenuSkip,
+#mobileMenuReset{
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.10),
+    inset 0 -2px 0 rgba(0,0,0,.45),
+    0 10px 24px rgba(0,0,0,.55) !important;
+}
+
+/* Message history popup */
+#mobileMsgPanel .mobile-msg-panel-inner{
+  background:
+    radial-gradient(circle at 50% 15%, rgba(255,255,255,.04), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, rgba(12,18,24,.70), rgba(6,10,14,.85)) !important;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 26px 70px rgba(0,0,0,.70) !important;
+}
+
+/* Thin message bar (collapsed state) */
+#mobileMsgBar .mobile-msg-inner{
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255,255,255,.03), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, rgba(10,14,18,.65), rgba(6,10,14,.80)) !important;
+}
+
+
 </style>
 </head>
 <body>
@@ -4221,7 +4464,9 @@ setMuted(uiMuted);
   }
 
   function playSfx(name){
-    if(uiMuted) return;
+    //if(uiMuted) return;
+    if(window.sfxMuted) return; // separate switch (default false)
+
 
     // file:// fallback: fetch/decodeAudioData is blocked by CORS on opaque origin "null"
     // Use HTMLAudioElement which can load file:// assets (like your bgm does).
