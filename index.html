@@ -3145,7 +3145,9 @@ setMuted(uiMuted);
   }
 
   function playSfx(name){
-    if(uiMuted) return;
+    //if(uiMuted) return;
+    if(window.sfxMuted) return; // separate switch (default false)
+
 
     // file:// fallback: fetch/decodeAudioData is blocked by CORS on opaque origin "null"
     // Use HTMLAudioElement which can load file:// assets (like your bgm does).
