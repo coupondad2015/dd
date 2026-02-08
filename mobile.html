@@ -123,7 +123,7 @@
       border:1px solid #1b2a33;
       border-radius:12px;
       padding:10px 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
     }
 
     /* === Compact full-width header band === */
@@ -1335,8 +1335,8 @@ button{
 
   /* Optional: animate the hamburger button a touch when open */
   .mobile-menu-btn.open{
-    border-color: rgba(130,190,210,.55);
-    background: rgba(15,25,32,.16);
+    border-color: rgba(130,190,210,.38);
+    background: rgba(15,25,32,.10);
   }
 }
 
@@ -1367,7 +1367,7 @@ button{
     padding: 10px;
     border-radius: 14px;
     border: 1px solid rgba(130,190,210,.28);
-    background: rgba(15,25,32,.10);         /* transparent like hamburger */
+    background: rgba(15,25,32,.06);         /* transparent like hamburger */
     box-shadow: 0 18px 50px rgba(0,0,0,.45);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -1393,7 +1393,7 @@ button{
   /* Buttons inside panel: also transparent */
   .mobile-menu-action{
     border: 1px solid rgba(130,190,210,.28);
-    background: rgba(15,25,32,.10);
+    background: rgba(15,25,32,.06);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
   }
@@ -1409,8 +1409,8 @@ button{
     width: 46px;
     height: 46px;
     border-radius: 999px;
-    border: 2px solid rgba(130,190,210,.35);
-    background: rgba(15,25,32,.10);
+    border: 2px solid rgba(130,190,210,.22);
+    background: rgba(15,25,32,.06);
     color: rgba(230,240,255,.90);
     font-family: inherit;
     font-size: 26px;
@@ -1418,7 +1418,7 @@ button{
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     z-index: 2000;
@@ -1426,8 +1426,8 @@ button{
     user-select: none;
   }
   .mobile-menu-btn.open{
-    border-color: rgba(130,190,210,.55);
-    background: rgba(15,25,32,.16);
+    border-color: rgba(130,190,210,.38);
+    background: rgba(15,25,32,.10);
   }
 
   .mobile-menu-backdrop{
@@ -1453,7 +1453,7 @@ button{
     padding: 10px;
     border-radius: 14px;
     border: 1px solid rgba(130,190,210,.28);
-    background: rgba(15,25,32,.10);
+    background: rgba(15,25,32,.06);
     box-shadow: 0 18px 50px rgba(0,0,0,.45);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -1481,7 +1481,7 @@ button{
     padding: 10px 10px;
     border-radius: 12px;
     border: 1px solid rgba(130,190,210,.28);
-    background: rgba(15,25,32,.10);
+    background: rgba(15,25,32,.06);
     color: rgba(230,240,255,.92);
     font-size: 14px;
   }
@@ -1524,8 +1524,8 @@ button{
     width: 46px !important;
     height: 46px !important;
     border-radius: 999px !important;
-    border: 2px solid rgba(130,190,210,.35) !important;
-    background: rgba(15,25,32,.10) !important;
+    border: 2px solid rgba(130,190,210,.22) !important;
+    background: rgba(15,25,32,.06) !important;
     color: rgba(230,240,255,.90) !important;
     font-family: inherit !important;
     font-size: 26px !important;
@@ -1533,7 +1533,7 @@ button{
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    box-shadow: 0 10px 30px rgba(0,0,0,.35) !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25) !important;
     backdrop-filter: blur(6px) !important;
     -webkit-backdrop-filter: blur(6px) !important;
     z-index: 2000 !important;
@@ -1541,8 +1541,8 @@ button{
     user-select: none !important;
   }
   .mobile-menu-btn.open{
-    border-color: rgba(130,190,210,.55) !important;
-    background: rgba(15,25,32,.16) !important;
+    border-color: rgba(130,190,210,.38) !important;
+    background: rgba(15,25,32,.10) !important;
   }
 }
 
@@ -1851,7 +1851,7 @@ button{
     radial-gradient(circle at 30% 25%, rgba(255,255,255,.12), rgba(255,255,255,0) 55%),
     linear-gradient(180deg, rgba(34,52,64,.88), rgba(16,24,30,.92)) !important;
 
-  border-color: rgba(130,190,210,.55) !important;
+  border-color: rgba(130,190,210,.38) !important;
 }
 
 /* Keep Reset “danger”, but still filled */
@@ -2223,7 +2223,7 @@ button{
 
   function isInCaves(y){ return y >= CAVE_Y0; }
 
-  const VIEW_W = 60, VIEW_H = 18;
+  const VIEW_W = 54, VIEW_H = 18;
 
   // ---------- Scroll helper ----------
   // Reveal the entire current level by marking all tiles as "seen".
