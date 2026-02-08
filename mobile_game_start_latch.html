@@ -4488,36 +4488,6 @@ setMuted(uiMuted);
   const sfxBuffers = {}; // name -> AudioBuffer
   let sfxReady = false;
 
-  // --- Game start SFX latch (fixes first-run missing intro without adding a loading screen) ---
-  // If game_start fires before WebAudio is ready/unlocked, we remember it and play once ASAP.
-  let __pendingGameStartSfx = false;
-  function requestGameStartSfx(){
-    __pendingGameStartSfx = true;
-    tryFlushGameStartSfx();
-  }
-  function tryFlushGameStartSfx(){
-    if(!__pendingGameStartSfx) return;
-    if(window.sfxMuted) return;
-
-    // file:// path already uses HTMLAudioElement and will succeed after the first gesture
-    // (we still let it attempt immediately).
-    if(location.protocol === "file:"){
-      try{ playSfx("game_start"); __pendingGameStartSfx = false; }catch(_){}
-      return;
-    }
-
-    if(!sfxReady || !sfxCtx) return;
-    try{ ensureSfxContextResumed(); }catch(_){}
-    if(sfxCtx && sfxCtx.state !== "running") return;
-
-    // If buffer failed to load, don't loop forever.
-    if(!sfxBuffers || !sfxBuffers["game_start"]) { __pendingGameStartSfx = false; return; }
-
-    try{ playSfx("game_start"); }catch(_){}
-    __pendingGameStartSfx = false;
-  }
-
-
   async function initSfxWebAudio(){
     try{
       sfxCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -4564,7 +4534,37 @@ setMuted(uiMuted);
     }
   }
 
-  function playSfx(name){
+  
+  // --- Game start SFX latch (fixes first-run missing intro without adding a loading screen) ---
+  // If game_start fires before WebAudio is ready/unlocked, we remember it and play once ASAP.
+  var __pendingGameStartSfx = false;
+  function requestGameStartSfx(){
+    __pendingGameStartSfx = true;
+    tryFlushGameStartSfx();
+  }
+  function tryFlushGameStartSfx(){
+    if(!__pendingGameStartSfx) return;
+    if(window.sfxMuted) return;
+
+    // file:// path uses HTMLAudioElement; attempt immediately (may succeed after first gesture).
+    if(location.protocol === "file:"){
+      try{ playSfx("game_start"); }catch(_){}
+      __pendingGameStartSfx = false;
+      return;
+    }
+
+    if(!sfxReady || !sfxCtx) return;
+    try{ ensureSfxContextResumed(); }catch(_){}
+    if(sfxCtx && sfxCtx.state !== "running") return;
+
+    // If buffer failed to load, don't loop forever.
+    if(!sfxBuffers || !sfxBuffers["game_start"]) { __pendingGameStartSfx = false; return; }
+
+    try{ playSfx("game_start"); }catch(_){}
+    __pendingGameStartSfx = false;
+  }
+
+function playSfx(name){
     //if(uiMuted) return;
     if(window.sfxMuted) return; // separate switch (default false)
 
@@ -4632,16 +4632,21 @@ setMuted(uiMuted);
   // Resume SFX context on first user gesture (keydown/click/touch)
   (function armSfxGestureResume(){
     const kick = () => {
-      // If AudioContext isn't created yet, don't disarm the hook.
+      // If AudioContext not created yet, don't waste the first gesture.
       if(!sfxCtx) return;
-
       ensureSfxContextResumed();
-
-      // Only disarm once we have a context (resume attempt has been made).
-      window.removeEventListener("keydown", kick, true);
-      window.removeEventListener("mousedown", kick, true);
-      window.removeEventListener("touchstart", kick, true);
+      try{ tryFlushGameStartSfx(); }catch(_){}
+      // Only disarm once context is no longer suspended.
+      if(sfxCtx.state !== "suspended"){
+        window.removeEventListener("keydown", kick, true);
+        window.removeEventListener("mousedown", kick, true);
+        window.removeEventListener("touchstart", kick, true);
+      }
     };
+    window.addEventListener("keydown", kick, true);
+    window.addEventListener("mousedown", kick, true);
+    window.addEventListener("touchstart", kick, true);
+  };
     window.addEventListener("keydown", kick, true);
     window.addEventListener("mousedown", kick, true);
     window.addEventListener("touchstart", kick, true);
