@@ -4632,8 +4632,12 @@ setMuted(uiMuted);
   // Resume SFX context on first user gesture (keydown/click/touch)
   (function armSfxGestureResume(){
     const kick = () => {
+      // If AudioContext isn't created yet, don't disarm the hook.
+      if(!sfxCtx) return;
+
       ensureSfxContextResumed();
-      try{ tryFlushGameStartSfx(); }catch(_){ }
+
+      // Only disarm once we have a context (resume attempt has been made).
       window.removeEventListener("keydown", kick, true);
       window.removeEventListener("mousedown", kick, true);
       window.removeEventListener("touchstart", kick, true);
