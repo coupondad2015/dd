@@ -891,6 +891,20 @@ button{
   color: rgba(20,27,34,0.40);
   pointer-events:none;
 }
+#mobileControls .btn.center.active{
+  opacity:1;
+  pointer-events:auto;
+  background: rgba(214,75,255,0.95);
+  color: #fff;
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.70),
+    inset 0 -2px 0 rgba(0,0,0,0.18),
+    0 0 0 2px var(--mKeyEdge),
+    0 0 0 4px rgba(255,255,255,0.06),
+    0 0 18px 3px rgba(214,75,255,0.35),
+    0 6px 0 var(--mKeyShadowDark),
+    0 10px 0 var(--mKeyShadowDeep);
+}
 #mobileControls .btn.diag.pressed{
   box-shadow:
     inset 0 2px 0 rgba(255,255,255,0.70),
@@ -4421,6 +4435,12 @@ setMuted(uiMuted);
     step:             { src: "sfx_step.wav",                 vol: 0.28 }, // was a touch hot
     step_corpsefield: { src: "sfx_step_corpsefield.wav",     vol: 0.45 },
 
+
+    move_water:       { src: "sfx_move_water.wav",          vol: 0.55 },
+    move_mist:        { src: "sfx_move_mist.wav",           vol: 0.55 },
+    move_fire:        { src: "sfx_move_fire.wav",           vol: 0.60 },
+    move_slime:       { src: "sfx_move_slime.wav",          vol: 0.55 },
+
     // Core interactions
     bump:     { src: "sfx_wall_bump.wav",            vol: 0.50 },
     locked_bump:{ src:"sfx_locked_bump.wav",         vol: 0.45 },
@@ -4436,6 +4456,7 @@ setMuted(uiMuted);
     torch_pickup:   { src: "sfx_torch_pickup.wav",          vol: 0.45 },
     torch_light:    { src: "sfx_torch_light.wav",           vol: 0.55 },
     trap_trigger:   { src: "sfx_trap_trigger.wav",       vol: 0.60, fallback: ["sfx_damage_trap.wav"] },
+    encounter_bats:{ src: "sfx_encounter_bats.wav",       vol: 0.55 },
 
     // Consumables / combat
     drink:    { src: "sfx_drink.wav",                vol: 0.65 }, // was a bit quiet
@@ -4522,13 +4543,35 @@ setMuted(uiMuted);
     if(location.protocol === "file:"){
       const def = SFX_DEFS[name];
       if(!def) return;
-      try{
-        const a = new Audio(resolveAsset("sfx", def.src));
-        const vol = (def?.vol ?? 0.5);
-        a.volume = Math.max(0, Math.min(1, vol * SFX_MASTER));
-        // Don’t throw if autoplay is blocked; user gesture will satisfy it anyway.
-        a.play().catch(()=>{});
-      }catch(_){}
+
+      // Support per-SFX fallbacks on file:// too (e.g., trap_trigger -> sfx_damage_trap.wav)
+      const urls = [];
+      try{ urls.push(resolveAsset("sfx", def.src)); }catch(_){}
+      urls.push(def.src);
+
+      const fb = Array.isArray(def.fallback) ? def.fallback : [];
+      for(const f of fb){
+        try{ urls.push(resolveAsset("sfx", f)); }catch(_){}
+        urls.push(f);
+      }
+
+      const vol = (def?.vol ?? 0.5);
+      const targetVol = Math.max(0, Math.min(1, vol * SFX_MASTER));
+
+      // Try each URL until one loads/plays.
+      (function tryPlay(i){
+        if(i >= urls.length) return;
+        try{
+          const a = new Audio(urls[i]);
+          a.volume = targetVol;
+          a.onended = null;
+          a.onerror = function(){ tryPlay(i+1); };
+          a.play().catch(function(){ /* autoplay may be blocked; will work after gesture */ });
+        }catch(_){
+          tryPlay(i+1);
+        }
+      })(0);
+
       return;
     }
 
@@ -5020,7 +5063,24 @@ function endGameLose(){
     const lvl = getLevel(game.depth);
     const ctx = getContextPrompt(lvl);
 
+    // Mobile Interact button: enabled only for single-action prompts (relic/shrine/altar). Traders handled separately.
+    const _mI = document.getElementById("mInteract");
+    const setMI = (on)=>{
+      if(!_mI) return;
+      if(on){
+        _mI.classList.add("active");
+        _mI.setAttribute("aria-disabled","false");
+        _mI.textContent = "Y";
+      }else{
+        _mI.classList.remove("active");
+        _mI.setAttribute("aria-disabled","true");
+        _mI.textContent = "Y";
+      }
+    };
+
+
     if(!ctx){
+      setMI(false);
       // If we just walked away from a relic prompt without claiming it, add a lore aftertaste.
       if(game.activePromptKey && typeof game.activePromptKey === 'string' && game.activePromptKey.startsWith('relic:')){
         const inCaves = isInCaves(game.player.y);
@@ -5034,6 +5094,7 @@ function endGameLose(){
     }
 
     if(ctx.type === 'trade'){
+      setMI(false);
       const selLabel = (ctx.selection === 'A') ? 'Potion' : 'Weapon Upgrade';
       const promptText =
         `TRADER offers: A) Potion (${ctx.costPotion}GP) or B) Weapon Upgrade (${ctx.costUpgrade}GP)  Selected: ${selLabel}  [Y] to Buy`;
@@ -5042,12 +5103,14 @@ function endGameLose(){
     }
 
     if(ctx.type === 'relic'){
+      setMI(true);
       fireLoreOnce('lore_relic', 'Something ancient seeks an audience.');
       setPromptMessage('Relic — Press [Y] to claim', `relic:${ctx.id}`);
       return;
     }
 
     if(ctx.type === 'altar'){
+      setMI(true);
       const txt = ctx.first ? 'Sacrifice at the alter?' : `Sacrifice ${ALTAR_GOLD_COST}GP at the alter?`;
       if(ctx.first) game.seenAltar = true;
       setPromptMessage(txt, `altar:${ctx.id}:${game.gold}:${game.hpMax}:${game.hp}`);
@@ -5055,6 +5118,7 @@ function endGameLose(){
     }
 
     if(ctx.type === 'shrine'){
+      setMI(true);
       fireLoreOnce('lore_shrine', 'Something listens.');
       setPromptMessage('Shrine — Press [Y] to pray', `shrine:${ctx.id}`);
       return;
@@ -5618,6 +5682,15 @@ function caveLoreCheck(lvl){
     // Environment lore triggers when near an environment region
     envLoreProximity(lvl, newX, newY);
     const e = envAt(lvl, newX, newY);
+
+    // Environmental encounter SFX: fire when stepping INTO an environment tile (transition only)
+    const prevE = envAt(lvl, prevX, prevY);
+    if(e && e !== prevE){
+      if(e === 'water') playSfx('move_water');
+      else if(e === 'mist') playSfx('move_mist');
+      else if(e === 'fire') playSfx('move_fire');
+      else if(e === 'slime') playSfx('move_slime');
+    }
 
     if(e === 'water'){
       // Flavor message + then apply torch/gear effects
@@ -8116,6 +8189,7 @@ function spawnCaveBats(lvl){
   if(!lvl || lvl.caveBatsTriggered) return;
   lvl.caveBatsTriggered = true;
 
+  playSfx("encounter_bats");
   // Decide pair vs swarm based on available cave footprint
   let caveTiles = 0;
   if(lvl.caveMask){
@@ -10847,7 +10921,7 @@ function spendGoldWithCGoldFirst(cost){
       <button class="btn dir diag" data-k="e" aria-label="Move northeast">↗</button>
 
       <button class="btn dir" data-k="a" aria-label="Move west">←</button>
-      <div class="btn center" aria-hidden="true">•</div>
+      <button class="btn center" id="mInteract" type="button" aria-label="Interact (Y)" aria-disabled="true">Y</button>
       <button class="btn dir" data-k="d" aria-label="Move east">→</button>
 
       <button class="btn dir diag" data-k="z" aria-label="Move southwest">↙</button>
@@ -10959,6 +11033,19 @@ function spendGoldWithCGoldFirst(cost){
       }catch(_){}
     }
   }
+  // Context-sensitive Interact button (Shrines / Relics / Altars): dispatches 'y' through the existing pipeline.
+  const mInteract = document.getElementById("mInteract");
+  if(mInteract){
+    const onTap = (e)=>{
+      if(mInteract.getAttribute("aria-disabled") === "true") return;
+      e.preventDefault();
+      dispatchKey("y");
+    };
+    mInteract.addEventListener("click", onTap, { passive:false });
+    mInteract.addEventListener("touchstart", onTap, { passive:false });
+  }
+
+
 
 const repeat = { timer:null, interval:null, key:null, down:false, downTs:0, initialDelayMs:330, repeatMs:95 };
   function clearRepeat(){
