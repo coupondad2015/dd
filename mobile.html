@@ -5685,7 +5685,8 @@ function caveLoreCheck(lvl){
 
     // Environmental encounter SFX: fire when stepping INTO an environment tile (transition only)
     const prevE = envAt(lvl, prevX, prevY);
-    if(e && e !== prevE){
+    //if(e && e !== prevE){
+    if(e){
       if(e === 'water') playSfx('move_water');
       else if(e === 'mist') playSfx('move_mist');
       else if(e === 'fire') playSfx('move_fire');
