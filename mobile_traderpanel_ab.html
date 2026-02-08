@@ -5128,6 +5128,42 @@ function endGameLose(){
     renderMessages();
   }
 
+// --- Trader panel (A/B selection only; confirm via existing center 'Y') ---
+var tradePanel = null, tradeText = null, tradeA = null, tradeB = null;
+
+function setTradeChoice(sel){
+  if(!tradeA || !tradeB) return;
+  var aOn = (sel === "A");
+  tradeA.classList.toggle("selected", aOn);
+  tradeB.classList.toggle("selected", !aOn);
+  tradeA.setAttribute("aria-checked", aOn ? "true" : "false");
+  tradeB.setAttribute("aria-checked", aOn ? "false" : "true");
+}
+
+function setTradePanel(open, txt, sel){
+  if(!tradePanel) return;
+  if(open){
+    tradePanel.classList.add("open");
+    tradePanel.setAttribute("aria-hidden","false");
+    if(tradeText) tradeText.textContent = txt || "";
+    setTradeChoice(sel || "A");
+  }else{
+    tradePanel.classList.remove("open");
+    tradePanel.setAttribute("aria-hidden","true");
+    if(tradeText) tradeText.textContent = "";
+  }
+}
+
+function bindTradeBtn(btn, sel){
+  if(!btn) return;
+  btn.addEventListener("pointerdown", (e)=>{
+    e.preventDefault();
+    try{ btn.setPointerCapture(e.pointerId); }catch(_){ }
+    setTradeChoice(sel);
+    dispatchKey(sel.toLowerCase()); // 'a' or 'b'
+  }, { passive:false });
+}
+
   function updateContextPrompt(){
     const lvl = getLevel(game.depth);
     const ctx = getContextPrompt(lvl);
@@ -11348,46 +11384,14 @@ const repeat = { timer:null, interval:null, key:null, down:false, downTs:0, init
   const msgPanel = document.getElementById("mobileMsgPanel");
   const msgList  = document.getElementById("mobileMsgList");
 
-  // --- Trader panel (A/B selection only; confirm via existing center 'Y') ---
-  const tradePanel = document.getElementById("mTradePanel");
-  const tradeText  = document.getElementById("mTradeText");
-  const tradeA     = document.getElementById("mTradeA");
-  const tradeB     = document.getElementById("mTradeB");
+// --- Trader panel (A/B selection only; confirm via existing center 'Y') ---
+tradePanel = document.getElementById("mTradePanel");
+tradeText  = document.getElementById("mTradeText");
+tradeA     = document.getElementById("mTradeA");
+tradeB     = document.getElementById("mTradeB");
+bindTradeBtn(tradeA, "A");
+bindTradeBtn(tradeB, "B");
 
-  function setTradeChoice(sel){
-    if(!tradeA || !tradeB) return;
-    const aOn = (sel === "A");
-    tradeA.classList.toggle("selected", aOn);
-    tradeB.classList.toggle("selected", !aOn);
-    tradeA.setAttribute("aria-checked", aOn ? "true" : "false");
-    tradeB.setAttribute("aria-checked", aOn ? "false" : "true");
-  }
-
-  function setTradePanel(open, txt, sel){
-    if(!tradePanel) return;
-    if(open){
-      tradePanel.classList.add("open");
-      tradePanel.setAttribute("aria-hidden","false");
-      if(tradeText) tradeText.textContent = txt || "";
-      setTradeChoice(sel || "A");
-    }else{
-      tradePanel.classList.remove("open");
-      tradePanel.setAttribute("aria-hidden","true");
-      if(tradeText) tradeText.textContent = "";
-    }
-  }
-
-  function bindTradeBtn(btn, sel){
-    if(!btn) return;
-    btn.addEventListener("pointerdown", (e)=>{
-      e.preventDefault();
-      try{ btn.setPointerCapture(e.pointerId); }catch(_){}
-      setTradeChoice(sel);
-      dispatchKey(sel.toLowerCase()); // 'a' or 'b'
-    }, { passive:false });
-  }
-  bindTradeBtn(tradeA, "A");
-  bindTradeBtn(tradeB, "B");
 
 
   const logEl = document.getElementById("log");
