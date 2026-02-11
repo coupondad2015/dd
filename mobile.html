@@ -841,6 +841,7 @@ button{
   gap: 12px;
 }
 
+
 #mobileControls .dpad{
   width: calc(var(--mPadBtn) * 3 + var(--mPadGap) * 2);
   height: calc(var(--mPadBtn) * 3 + var(--mPadGap) * 2);
@@ -1915,6 +1916,53 @@ button{
 }
 
 
+
+/* ---- Native Trader Panel (mobile-only) ---- */
+#mTraderPanel{
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: 260px; /* sits above keypad */
+  z-index: 100000;
+  display: none;
+  pointer-events: auto;
+}
+#mTraderPanel *{ pointer-events:auto; }
+#mTraderPanel .tp-card{
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(10,14,18,0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 10px 10px 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+}
+#mTraderPanel .tp-title{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+  letter-spacing: 0.18em;
+  opacity: 0.85;
+  margin: 2px 2px 10px;
+}
+#mTraderPanel .tp-row{ display:flex; gap:10px; }
+#mTraderPanel .tp-choice{
+  flex:1;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(0,0,0,0.18);
+  color: rgba(255,255,255,0.92);
+  padding: 10px 12px;
+  font-size: 18px;
+}
+#mTraderPanel .tp-choice small{
+  display:inline-block;
+  margin-left: 8px;
+  opacity: 0.8;
+  font-size: 16px;
+}
+#mTraderPanel .tp-choice.selected{
+  outline: 2px solid rgba(255, 209, 102, 0.65);
+  border-color: rgba(255, 209, 102, 0.65);
+}
 </style>
 </head>
 <body>
@@ -2256,7 +2304,7 @@ button{
   const SECRET_REWARD_MULT = 2;
 
   // Trader tuning
-  const TRADER_SPAWN_CHANCE = 0.22;
+  const TRADER_SPAWN_CHANCE = 1;//0.22;
   const TRADER_POTION_COST = 12;
   const TRADER_WEAPON_COST = 25;
   const TRADER_WEAPON_ATK_BONUS = 1;
@@ -5081,6 +5129,7 @@ function endGameLose(){
 
     if(!ctx){
       setMI(false);
+      try{ const panel=document.getElementById("mTraderPanel"); if(panel) panel.style.display="none"; }catch(_){}
       // If we just walked away from a relic prompt without claiming it, add a lore aftertaste.
       if(game.activePromptKey && typeof game.activePromptKey === 'string' && game.activePromptKey.startsWith('relic:')){
         const inCaves = isInCaves(game.player.y);
@@ -5093,15 +5142,31 @@ function endGameLose(){
       return;
     }
 
-    if(ctx.type === 'trade'){
-      setMI(false);
-      const selLabel = (ctx.selection === 'A') ? 'Potion' : 'Weapon Upgrade';
-      const promptText =
-        `TRADER offers: A) Potion (${ctx.costPotion}GP) or B) Weapon Upgrade (${ctx.costUpgrade}GP)  Selected: ${selLabel}  [Y] to Buy`;
-      setPromptMessage(promptText, `trade:${ctx.selection}:${game.gold}:${game.inv.keys}:${game.inv.torches}:${game.inv.potions.length}`);
-      return;
-    }
+    
+if(ctx.type === 'trade'){
+  // Mobile: Trader is handled by native panel + Y confirm (no A/B keyboard prompts)
+  setMI(true);
 
+  // Show/paint trader panel if present
+  try{
+    const panel = document.getElementById("mTraderPanel");
+    if(panel) panel.style.display = "block";
+    const bA = document.getElementById("tpPotion");
+    const bB = document.getElementById("tpWeapon");
+    if(bA) bA.classList.toggle("selected", ctx.selection === "A");
+    if(bB) bB.classList.toggle("selected", ctx.selection === "B");
+    const cA = document.getElementById("tpPotionCost");
+    const cB = document.getElementById("tpWeaponCost");
+    if(cA) cA.textContent = `(${ctx.costPotion}GP)`;
+    if(cB) cB.textContent = `(${ctx.costUpgrade}GP)`;
+  }catch(_){}
+
+  const selLabel = (ctx.selection === 'A') ? 'Potion' : 'Weapon Upgrade';
+  const promptText =
+    `TRADER offers: Potion (${ctx.costPotion}GP) or Weapon Upgrade (${ctx.costUpgrade}GP)  Selected: ${selLabel}  [Y] to Buy`;
+  setPromptMessage(promptText, `trade:${ctx.selection}:${game.gold}:${game.inv.keys}:${game.inv.torches}:${game.inv.potions.length}`);
+  return;
+}
     if(ctx.type === 'relic'){
       setMI(true);
       fireLoreOnce('lore_relic', 'Something ancient seeks an audience.');
@@ -10702,89 +10767,110 @@ ${DEBUG ? `
     }
   }
 
-  // ---------- INPUT ----------
-  function handleKey(e){
-    let k = e.key.toLowerCase();
-    // Arrow keys support
-    if(k === 'arrowup') k = 'w';
-    else if(k === 'arrowdown') k = 's';
-    else if(k === 'arrowleft') k = 'a';
-    else if(k === 'arrowright') k = 'd';
+// ---------- INPUT (Mobile-first action router) ----------
+function keyToAction(rawKey){
+  let k = (rawKey || "").toLowerCase();
 
-    // Input lock: prevents movement/combat during short tile-only animations (e.g., monster death dissolve)
-    try{
-      if(game && game.__lockInputUntil && performance.now() < game.__lockInputUntil){
-        e.preventDefault();
-        return;
-      }
-    }catch(_){}
+  // Arrow keys support (some mobile keyboards / desktop testing)
+  if(k === 'arrowup') k = 'w';
+  else if(k === 'arrowdown') k = 's';
+  else if(k === 'arrowleft') k = 'a';
+  else if(k === 'arrowright') k = 'd';
 
-    
+  // Normalize common mobile "space" / "spacebar"
+  if(k === 'spacebar') k = ' ';
+  // Map '.' to wait for this build's UI (wheel uses '.')
+  if(k === '.') return { type:'WAIT' };
 
+  if(k === '>') return { type:'DESCEND' };
+  if(k === 'p') return { type:'HEAL' };
+  if(k === 'y') return { type:'INTERACT' };
+  if(k === 'b') return { type:'TRADER_SEL', sel:'B' };
 
-    // Context prompts: Y interacts, movement declines by moving away.
-    const lvl = getLevel(game.depth);
-    const ctx = getContextPrompt(lvl);
+  if(k === '0') return { type:'POTION', idx:0 };
+  if(k === '1') return { type:'POTION', idx:1 };
+  if(k === '2') return { type:'POTION', idx:2 };
+  if(k === '3') return { type:'POTION', idx:3 };
+  if(k === '4') return { type:'POTION', idx:4 };
 
-    if(ctx){
-      if(ctx.type === 'trade'){
-        if(k === 'a' || k === 'b'){
-          TRADE_SELECTION = (k === 'a') ? 'A' : 'B';
-          renderAll();
-          return;
-        }
-        if(k === 'y'){
-          e.preventDefault();
-          if(TRADE_SELECTION === 'A') buyTraderPotion();
-          else buyTraderUpgrade();
-          renderAll();
-          return;
-        }
-      }
+  // Wait via space also supported
+  if(k === ' ') return { type:'WAIT' };
 
-      if(ctx.type === 'altar' && k === 'y'){
-        e.preventDefault();
-        resolveAltarAt(lvl.player.x, lvl.player.y);
-        renderAll();
-        return;
-      }
+  // Movement keys always mean movement (even while on trader)
+  if(k in DIRS){
+    const [dx,dy] = DIRS[k];
+    return { type:'MOVE', dx, dy };
+  }
 
-      if(ctx.type === 'shrine' && k === 'y'){
-        e.preventDefault();
-        resolveShrineAt(lvl.player.x, lvl.player.y);
-        renderAll();
-        return;
-      }
+  return null;
+}
 
-      if(ctx.type === 'relic' && k === 'y'){
-        e.preventDefault();
-        resolveChaosRelicAt(lvl.player.x, lvl.player.y);
-        renderAll();
-        return;
-      }
-    }
-if(game.ended) return;
+function dispatchAction(action){
+  if(!action) return;
 
-    if(k === '>'){ e.preventDefault(); tryDescend(); return; }
-    if(k === 'p'){ e.preventDefault(); drinkHealingPotion(); return; }
-    if(k === '0'){ e.preventDefault(); drinkPotionType(POTION.POISON); return; }
-    if(k === '1'){ e.preventDefault(); drinkPotionType(POTION.INVIS); return; }
-    if(k === '2'){ e.preventDefault(); drinkPotionType(POTION.TRANSMUTE); return; }
-    if(k === '3'){ e.preventDefault(); drinkPotionType(POTION.INVINC); return; }
-    if(k === '4'){ e.preventDefault(); drinkPotionType(POTION.TELE); return; }
-    // Wait / Rest (turn passes without movement)
-    if(k === ' '){
-      e.preventDefault();
-      tryMove(0,0);
+  // Input lock: prevents movement/combat during short tile-only animations
+  try{
+    if(game && game.__lockInputUntil && performance.now() < game.__lockInputUntil){
       return;
     }
+  }catch(_){}
 
-    if(!(k in DIRS)) return;
+  const lvl = getLevel(game.depth);
+  const ctx = getContextPrompt(lvl);
 
-    e.preventDefault();
-    const [dx,dy] = DIRS[k];
-    tryMove(dx,dy);
+  // Context-sensitive trader selection
+  if(action.type === 'TRADER_SEL'){
+    if(action.sel === 'A' || action.sel === 'B'){
+      TRADE_SELECTION = action.sel;
+      try{ renderAll(); }catch(_){ }
+    }
+    return;
   }
+
+  // Context-sensitive INTERACT (Y)
+  if(action.type === 'INTERACT' && ctx){
+    if(ctx.type === 'trade'){
+      if(TRADE_SELECTION === 'A') buyTraderPotion();
+      else buyTraderUpgrade();
+      renderAll();
+      return;
+    }
+    if(ctx.type === 'altar'){ resolveAltarAt(lvl.player.x, lvl.player.y); renderAll(); return; }
+    if(ctx.type === 'shrine'){ resolveShrineAt(lvl.player.x, lvl.player.y); renderAll(); return; }
+    if(ctx.type === 'relic'){ resolveChaosRelicAt(lvl.player.x, lvl.player.y); renderAll(); return; }
+  }
+
+  if(game.ended) return;
+
+  switch(action.type){
+    case 'DESCEND': tryDescend(); return;
+    case 'HEAL': drinkHealingPotion(); return;
+    case 'POTION': {
+      const map = [POTION.POISON, POTION.INVIS, POTION.TRANSMUTE, POTION.INVINC, POTION.TELE];
+      drinkPotionType(map[action.idx] ?? POTION.POISON);
+      return;
+    }
+    case 'WAIT': tryMove(0,0); return;
+    case 'MOVE': tryMove(action.dx, action.dy); return;
+    default: return;
+  }
+}
+
+function handleKey(e){
+  const action = keyToAction(e && e.key);
+  if(!action) return;
+  try{ e.preventDefault(); }catch(_){}
+  dispatchAction(action);
+}
+
+// Expose to mobile UI (no synthetic KeyboardEvents)
+window.DD_dispatchKey = function(k){ dispatchAction(keyToAction(k)); };
+window.DD_traderSelect = function(sel){
+  if(sel === 'A' || sel === 'B'){
+    TRADE_SELECTION = sel;
+    try{ renderAll(); }catch(_){}
+  }
+};
 
   document.addEventListener('keydown', handleKey);
   $restartBtn.addEventListener('click', newGame);
@@ -10914,6 +11000,22 @@ function spendGoldWithCGoldFirst(cost){
      MOBILE CONTROLS (Prototype 1)
      - Keyboard-event driven so the v218 input pipeline remains intact
      ============================================================ -->
+
+<!-- Native Trader Panel (mobile): bypasses keyboard handler -->
+<div id="mTraderPanel" aria-label="Trader panel">
+  <div class="tp-card">
+    <div class="tp-title">TRADER</div>
+    <div class="tp-row">
+      <button class="tp-choice" id="tpPotion" type="button" aria-label="Select Potion">
+        Potion <small id="tpPotionCost">(—GP)</small>
+      </button>
+      <button class="tp-choice" id="tpWeapon" type="button" aria-label="Select Weapon Upgrade">
+        Weapon <small id="tpWeaponCost">(—GP)</small>
+      </button>
+    </div>
+  </div>
+</div>
+
 <div id="mobileControls" aria-label="Mobile controls">
   <div class="controls-inner">
     <div class="dpad" id="mDpad" aria-label="Movement pad">
@@ -10967,127 +11069,48 @@ function spendGoldWithCGoldFirst(cost){
   const isMobile = matchMedia("(max-width: 980px)").matches;
   const root = document.documentElement;
 
-  function dispatchKey(k){
-    // Feed the existing v218 key pipeline *once*.
-    // Some handlers key off `code`/`keyCode` for punctuation (e.g. '.' wait),
-    // so we provide a small mapping for the keys we synthesize.
-    const map = (key)=>{
-      // Default best-effort
-      const out = { key, code: "", keyCode: 0, which: 0 };
-      // Digits 0-9
-      if(/^[0-9]$/.test(key)){
-        out.code = "Digit" + key;
-        out.keyCode = out.which = 48 + (key.charCodeAt(0) - 48);
-        return out;
-      }
-      // Lowercase letters we use
-      if(/^[a-z]$/.test(key)){
-        out.code = "Key" + key.toUpperCase();
-        out.keyCode = out.which = key.toUpperCase().charCodeAt(0);
-        return out;
-      }
-      // Punctuation / specials used by the game
-      if(key === "."){
-        out.code = "Period";
-        out.keyCode = out.which = 190;
-        return out;
-      }
-      if(key === ">"){
-        out.code = "Period"; // same physical key as '.'
-        out.keyCode = out.which = 190;
-        return out;
-      }
-      return out;
-    };
+  function dispatchKey(k){ try{ if(window.DD_dispatchKey) window.DD_dispatchKey(k); }catch(_){ } }
 
-    const m = map(k);
+// --- Bind mobile control buttons to dispatchKey (no synthetic KeyboardEvent) ---
+const dpad = document.getElementById("mDpad");
+if(dpad){
+  dpad.querySelectorAll("button[data-k]").forEach(btn=>{
+    // use pointerup so a long press doesn't double-fire on some browsers
+    btn.addEventListener("pointerup", (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      const k = btn.dataset.k;
+      if(k) dispatchKey(k);
+    }, { passive:false });
+  });
+}
 
-    try{
-      const screen = document.getElementById("screen");
-      const target = screen || window;
+const mInteract = document.getElementById("mInteract");
+if(mInteract){
+  mInteract.addEventListener("pointerup", (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    if(mInteract.getAttribute("aria-disabled")==="true") return;
+    dispatchKey("y");
+  }, { passive:false });
+}
 
-      // Prefer focusing the game screen when available
-      if(screen){
-        if(!screen.hasAttribute("tabindex")) screen.tabIndex = -1;
-        try{ screen.focus({ preventScroll:true }); }catch(_){ try{ screen.focus(); }catch(__){} }
-      }
+// Trader panel buttons: drive existing trade selection (A/B) reliably
+const tpPotion = document.getElementById("tpPotion");
+const tpWeapon = document.getElementById("tpWeapon");
+if(tpPotion){
+  tpPotion.addEventListener("pointerup", (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    dispatchKey("a");
+  }, { passive:false });
+}
+if(tpWeapon){
+  tpWeapon.addEventListener("pointerup", (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    dispatchKey("b");
+  }, { passive:false });
+}
 
-      // Dispatch both keydown + keypress for maximum compatibility (some builds listen to keypress for '.')
-      const common = { key: m.key, code: m.code, bubbles: true, cancelable: true };
-      const evDown = new KeyboardEvent("keydown", common);
-      const evPress = new KeyboardEvent("keypress", common);
-      Object.defineProperty(evDown, "keyCode", { get: ()=>m.keyCode });
-      Object.defineProperty(evDown, "which",   { get: ()=>m.which });
-      Object.defineProperty(evPress,"keyCode", { get: ()=>m.keyCode });
-      Object.defineProperty(evPress,"which",   { get: ()=>m.which });
-
-      target.dispatchEvent(evDown);
-      target.dispatchEvent(evPress);
-    }catch(e){
-      // Last resort: older browsers / restricted KeyboardEvent construction
-      try{
-        const evt = document.createEvent("Event");
-        evt.initEvent("keydown", true, true);
-        evt.key = m.key;
-        evt.code = m.code;
-        window.dispatchEvent(evt);
-      }catch(_){}
-    }
-  }
-  // Context-sensitive Interact button (Shrines / Relics / Altars): dispatches 'y' through the existing pipeline.
-  const mInteract = document.getElementById("mInteract");
-  if(mInteract){
-    const onTap = (e)=>{
-      if(mInteract.getAttribute("aria-disabled") === "true") return;
-      e.preventDefault();
-      dispatchKey("y");
-    };
-    mInteract.addEventListener("click", onTap, { passive:false });
-    mInteract.addEventListener("touchstart", onTap, { passive:false });
-  }
-
-
-
-const repeat = { timer:null, interval:null, key:null, down:false, downTs:0, initialDelayMs:330, repeatMs:95 };
-  function clearRepeat(){
-    if(repeat.timer){ clearTimeout(repeat.timer); repeat.timer=null; }
-    if(repeat.interval){ clearInterval(repeat.interval); repeat.interval=null; }
-    repeat.key=null;
-    repeat.down=false;
-  }
-
-  function pressBtn(btn, on){ if(btn) btn.classList.toggle("pressed", !!on); }
-
-  // --- D-Pad ---
-  const dpad = document.getElementById("mDpad");
-  if(dpad){
-    dpad.querySelectorAll(".dir").forEach(btn=>{
-      btn.addEventListener("pointerdown", (e)=>{
-        e.preventDefault();
-        btn.setPointerCapture(e.pointerId);
-        clearRepeat();
-        repeat.key = btn.dataset.k;
-        repeat.down = true;
-        repeat.downTs = performance.now();
-
-        pressBtn(btn, true);
-        dispatchKey(repeat.key);
-
-        repeat.timer = setTimeout(()=>{
-          // Guard: avoid accidental "double move" on slightly-long taps
-          if(!repeat.down) return;
-          if(!repeat.key) return;
-          if(performance.now() - repeat.downTs < repeat.initialDelayMs) return;
-          repeat.interval = setInterval(()=>{ if(repeat.down && repeat.key) dispatchKey(repeat.key); }, repeat.repeatMs);
-        }, repeat.initialDelayMs);
-      }, { passive:false });
-
-      btn.addEventListener("pointerup", (e)=>{ e.preventDefault(); repeat.down=false; pressBtn(btn,false); clearRepeat(); }, { passive:false });
-      btn.addEventListener("pointercancel", ()=>{ pressBtn(btn,false); clearRepeat(); });
-    });
-  }
-
-  // --- Wheel + Heal (tap vs hold) ---
+  // dispatchKey() is handled by the mobile-only input router (window.DD_dispatchKey)
+// --- Wheel + Heal (tap vs hold) ---
   const wheel = document.getElementById("mWheel");
   const healBtn = document.getElementById("mHealBtn");
   const healHold = { holdMs: 260, timer:null, opened:false, down:false, suppressThisPress:false };
@@ -11122,6 +11145,7 @@ const repeat = { timer:null, interval:null, key:null, down:false, downTs:0, init
       if(badge) badge.textContent = String(n);
     });
   }
+  try{ window.refreshWheelCounts = refreshWheelCounts; }catch(_){ }
 
   function openWheel(){
     if(!wheel) return;
