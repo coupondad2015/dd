@@ -16,48 +16,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Dungeons Deep — ASCII Roguelike</title>
   <link rel="icon" href="images/icons/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="96x96" href="images/icons/favicon-96x
-
-/* Mobile message bar: 2-line collapsed, 5-line expanded */
-#mobileMsgText{
-  flex: 1 1 auto;
-  min-width: 0;
-  white-space: normal;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2; /* collapsed */
-  line-height: 1.25;
-}
-#mobileMsgBar.expanded #mobileMsgText{
-  -webkit-line-clamp: 5; /* expanded */
-}
-#mobileMsgText .mline{
-  display:block;
-  padding: 3px 0;
-  border-top: 1px solid rgba(255,255,255,0.06);
-}
-#mobileMsgText .mline:first-child{ border-top: none; }
-
-.mobile-msg-toggle{
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  margin-left: 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(130,190,210,0.26);
-  background: rgba(255,255,255,0.05);
-  color: rgba(230,240,255,0.92);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-.mobile-msg-toggle:active{ background: rgba(255,255,255,0.08); }
-#mobileMsgBar.expanded .mobile-msg-toggle{ transform: rotate(180deg); }
-96.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="images/icons/favicon-96x96.png">
   <link rel="icon" type="image/svg+xml" href="images/icons/favicon.svg">
   <link rel="apple-touch-icon" href="images/icons/apple-touch-icon.png">
   <link rel="manifest" href="images/icons/site.webmanifest">
@@ -222,6 +181,28 @@
       filter: saturate(0.95) contrast(1.05);
     }
 
+
+    /* --- Weapon ATK superscript badge (HUD-only) --- */
+    .hud .atk-num-wrap{
+      position: relative;
+      display: inline-block;
+      line-height: 1;
+    }
+    .hud .atk-sup{
+      position: absolute;
+      top: -0.70em;
+      right: -0.95em;
+      font-size: 0.65em;              /* ~65% of HUD size */
+      font-weight: 900;
+      line-height: 1;
+      color: rgba(255, 210, 120, 0.98); /* gold */
+      text-shadow: 0 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(0,0,0,0.85);
+      pointer-events: none;
+      user-select: none;
+      display: inline-block; /* always visible */
+    }
+    /* Ensure the superscript isn't clipped vertically */
+    .hud{ overflow: visible; }
     .hud-logo img{
         height: 38px;      /* tweak to taste */
         width: auto;
@@ -10544,7 +10525,7 @@ const safe = ch === ' ' ? '&nbsp;' : escapeHtml(ch);
     $hud.innerHTML = `
       <span class="hud-item muted"><b>HP</b> ${game.hp}/${game.hpMax}</span>
 <span class="hud-item muted potion"><img class="hud-ico" src="images/icons/potion_18.png" alt="Potions" title="Potions" /><b>${potionCount}</b>/<b>${POTION_CAP}</b></span><span class="hud-item muted torch"><img class="hud-ico" src="images/icons/torch_18.png" alt="Torch" title="Torch" /><b>${game.inv.torches}</b>/<b>${TORCH_CAP}</b></span>
-      <span class="hud-item weapon muted"><img class="hud-ico" src="images/icons/${escapeHtml(game.weaponName)==='Bare Hands' ? 'fist_18.png' : 'sword_18.png'}" alt="Weapon" title="Weapon" /><b>${game.atk}</b></span>
+      <span class="hud-item weapon muted"><img class="hud-ico" src="images/icons/${escapeHtml(game.weaponName)==='Bare Hands' ? 'fist_18.png' : 'sword_18.png'}" alt="Weapon" title="Weapon" /><span class="atk-num-wrap"><b>${game.atk}</b><span class="atk-sup" id="atkSup" aria-hidden="true"></span></span></span>
       <span class="hud-item muted gold"><img class="hud-ico" src="images/icons/chest_18.png" alt="Gold" title="Chest" /><b>${game.gold}</b></span>
       <span class="hud-item muted keys"><img class="hud-ico" src="images/icons/key_18.png" alt="Keys" title="Key" /><b>${game.inv.keys}</b></span>
       <span class="hud-item muted lvl" style="display:none">Lvl <b>${depthStr}</b></span>
@@ -10560,9 +10541,27 @@ ${DEBUG ? `
         </div>
       ` : ``}
     `;
+    try{ updateAtkSup(); }catch(_){ }
   }
 
-  function buildScreenFrame(){
+  
+
+  // ------------------------------------------------------------
+  // HUD-only helper: show weapon upgrade level as +N superscript.
+  // Source of truth: count of '+' appended to game.weaponName by upgrade logic.
+  // ------------------------------------------------------------
+  function updateAtkSup(){
+    const el = document.getElementById("atkSup");
+    if(!el) return;
+    let n = 0;
+    try{
+      const name = (game && typeof game.weaponName === "string") ? game.weaponName : "";
+      n = (name.match(/\+/g) || []).length;
+    }catch(_){ n = 0; }
+    el.textContent = "+" + String(n);
+  }
+
+function buildScreenFrame(){
     const capCells = [];
     window.__capCells = capCells;
     const lvl = getLevel(game.depth);
