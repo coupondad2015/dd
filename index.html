@@ -3098,15 +3098,58 @@ setMuted(uiMuted);
   const SFX_MASTER = 0.55; // global SFX loudness (0..1)
 
   const SFX_DEFS = {
-    step:     { src: "sfx_step.wav",                 vol: 0.35 },
-    bump:     { src: "sfx_wall_bump.wav",            vol: 0.55 },
-    pickup:   { src: "sfx_pickup.wav",               vol: 0.55 },
-    drink:    { src: "sfx_drink.wav",                vol: 0.50 },
-    attack:   { src: "sfx_attack.wav",               vol: 0.60 },
-    damage:   { src: "sfx_damage.wav",               vol: 0.70 },
+    // Movement
+    step:             { src: "sfx_step.wav",                 vol: 0.28 }, // was a touch hot
+    step_corpsefield: { src: "sfx_step_corpsefield.wav",     vol: 0.45 },
+
+
+    move_water:       { src: "sfx_move_water.wav",          vol: 0.55 },
+    move_mist:        { src: "sfx_move_mist.wav",           vol: 0.55 },
+    move_fire:        { src: "sfx_move_fire.wav",           vol: 0.60 },
+    move_slime:       { src: "sfx_move_slime.wav",          vol: 0.55 },
+
+    // Core interactions
+    bump:     { src: "sfx_wall_bump.wav",            vol: 0.50 },
+    locked_bump:{ src:"sfx_locked_bump.wav",         vol: 0.45 },
+
+    // Pickups (semantic)
+    pickup:        { src: "sfx_pickup.wav",          vol: 0.50 }, // fallback / generic
+    pickup_chest:  { src: "sfx_pickup_chest.wav",    vol: 0.70 },
+    pickup_potion: { src: "sfx_pickup_potion.wav",   vol: 0.55 },
+    pickup_scroll: { src: "sfx_pickup_scroll.wav",   vol: 0.55 },
+    pickup_key:    { src:'sfx_pickup.wav', vol:0.95 },
+    pickup_weapon: { src:'sfx_pickup.wav', vol:0.95 },
+
+    pickup_relic:  { src: "sfx_pickup_relic.wav",    vol: 0.80 },
+    pickup_shrine: { src: "sfx_pickup_shrine.wav",   vol: 0.80 },
+
+    torch_pickup:   { src: "sfx_torch_pickup.wav",          vol: 0.45 },
+    torch_light:    { src: "sfx_torch_light.wav",           vol: 0.55 },
+    trap_trigger:   { src: "sfx_trap_trigger.wav",       vol: 0.60, fallback: ["sfx_damage_trap.wav"] },
+    encounter_bats:{ src: "sfx_encounter_bats.wav",       vol: 0.55 },
+
+    // Consumables / combat
+    drink:    { src: "sfx_drink.wav",                vol: 0.65 }, // was a bit quiet
+    attack:   { src: "sfx_attack.wav",               vol: 0.42 }, // was too loud
+    damage:   { src: "sfx_damage.wav",               vol: 0.65 },
+    player_death:{ src: "sfx_player_death.wav",       vol: 0.90 },
+    game_start: { src: "sfx_game_start.wav",        vol: 0.75 },
+    death_monster:{ src:"sfx_death_monster.wav",     vol: 0.60 },
+
+    // Doors / transitions
+    door_open:     { src: "sfx_door_open.wav",       vol: 0.55 },
+    door_break:    { src: "sfx_door_break.wav",      vol: 0.75 },
+    door_secret:   { src: "sfx_door_secret.wav",     vol: 0.60 },
+    door_key_open: { src: "sfx_door_key_open.wav",   vol: 0.60 },
+    cave_opening:  { src: "sfx_cave_opening.wav",    vol: 0.65 },
+
     descend:  { src: "sfx_descend.wav",              vol: 0.60 },
-    wait:     { src: "sfx_wait.wav",                 vol: 0.30 },
-    mtn_trial:{ src: "sfx_boss_mountain_trial.wav", vol: 1.00 },
+    descent_secret:{ src: "sfx_descent_secret.wav",  vol: 0.70 },
+
+    wait:     { src: "sfx_wait.wav",                 vol: 0.26 },
+
+    // Boss
+    mtn_trial:{ src: "sfx_boss_mountain_trial.wav",  vol: 1.00 },
     mtn_fall: { src: "sfx_boss_mountain_death.wav",  vol: 1.00 }
   };
 
@@ -3123,12 +3166,28 @@ setMuted(uiMuted);
       sfxMasterGain.connect(sfxCtx.destination);
 
       const entries = Object.entries(SFX_DEFS);
+
+      // Load each SFX independently so a single missing/corrupt file doesn't disable all SFX.
       for(const [name, def] of entries){
-        const primary = resolveAsset("sfx", def.src);
-        const resp = await fetchWithFallback([primary, def.src], { cache: "no-store" });
-        const arr = await resp.arrayBuffer();
-        const buf = await sfxCtx.decodeAudioData(arr);
-        sfxBuffers[name] = buf;
+        try{
+          const primary = resolveAsset("sfx", def.src);
+
+          // Optional per-SFX fallback filenames (keeps older builds compatible)
+          const fb = Array.isArray(def.fallback) ? def.fallback : [];
+          const urlList = [primary, def.src];
+          for(const f of fb){
+            try{ urlList.push(resolveAsset("sfx", f)); }catch(_){ }
+            urlList.push(f);
+          }
+
+          const resp = await fetchWithFallback(urlList, { cache: "no-store" });
+          const arr = await resp.arrayBuffer();
+          const buf = await sfxCtx.decodeAudioData(arr);
+          sfxBuffers[name] = buf;
+        }catch(e){
+          console.warn("SFX failed to load:", name, def?.src, e);
+          sfxBuffers[name] = null;
+        }
       }
       sfxReady = true;
     }catch(e){
@@ -3154,13 +3213,35 @@ setMuted(uiMuted);
     if(location.protocol === "file:"){
       const def = SFX_DEFS[name];
       if(!def) return;
-      try{
-        const a = new Audio(resolveAsset("sfx", def.src));
-        const vol = (def?.vol ?? 0.5);
-        a.volume = Math.max(0, Math.min(1, vol * SFX_MASTER));
-        // Don’t throw if autoplay is blocked; user gesture will satisfy it anyway.
-        a.play().catch(()=>{});
-      }catch(_){}
+
+      // Support per-SFX fallbacks on file:// too (e.g., trap_trigger -> sfx_damage_trap.wav)
+      const urls = [];
+      try{ urls.push(resolveAsset("sfx", def.src)); }catch(_){}
+      urls.push(def.src);
+
+      const fb = Array.isArray(def.fallback) ? def.fallback : [];
+      for(const f of fb){
+        try{ urls.push(resolveAsset("sfx", f)); }catch(_){}
+        urls.push(f);
+      }
+
+      const vol = (def?.vol ?? 0.5);
+      const targetVol = Math.max(0, Math.min(1, vol * SFX_MASTER));
+
+      // Try each URL until one loads/plays.
+      (function tryPlay(i){
+        if(i >= urls.length) return;
+        try{
+          const a = new Audio(urls[i]);
+          a.volume = targetVol;
+          a.onended = null;
+          a.onerror = function(){ tryPlay(i+1); };
+          a.play().catch(function(){ /* autoplay may be blocked; will work after gesture */ });
+        }catch(_){
+          tryPlay(i+1);
+        }
+      })(0);
+
       return;
     }
 
@@ -3439,6 +3520,7 @@ function weightedChoice(items, weights){
     logMsg("");
 logMsg("");
     renderAll();
+    try{ playSfx('game_start'); }catch(_){ }
   }
 
   function endGameWin(){
@@ -3572,6 +3654,7 @@ function endGameLose(){
     }catch(_){}
 
     game.ended = true;
+    playSfx('player_death');
     game.victory = false;
     logMsg("Defeat — the depths claim another explorer.");
     logMsg("Reset to try again.");
@@ -4238,6 +4321,7 @@ function currentVisionRadius(){
     if(game.inv.torches <= 0) return;
     game.inv.torches--;
     startNewTorchBurn();
+    playSfx('torch_light');
     logMsg("A torch flares to life. The darkness retreats.");
   }
 
@@ -7252,6 +7336,7 @@ else {
     if(!it || it.type !== 'A') return;
 
     lvl.items.delete(k);
+    playSfx("pickup_relic");
     logMsg("The relic shatters — something answers the call.");
     fireLoreOnce("cave_relic_shatter", "The old stone learns your name.");
     startTileAnim(x, y, "monster_death", 700, { glyph: 'ѧ', color: COL.chaosRelic });
@@ -7334,6 +7419,7 @@ function resolveShrineAt(x, y){
     if(!it || it.type !== ENT.SHRINE) return;
 
     lvl.items.delete(k);
+    playSfx("pickup_shrine");
 
     if(game.hpMax >= MAX_HP_CAP){
       logMsg("The shrine is dormant. You feel no further growth is possible.");
@@ -7689,6 +7775,7 @@ function roomPassableInteriorCount(lvl, r){
 }, 700);
       }
 
+      playSfx('death_monster');
       lvl.monsters.delete(k);
 
       // Intercessor resolution: if the Intercessor falls, remaining faithful surrender.
@@ -8190,6 +8277,7 @@ if(dx===0 && dy===0) continue;
 
     if(t === TILE.DOOR_C){
       setTileWithAnim(lvl, x, y, TILE.DOOR_O, "open");
+      playSfx("door_open");
       if(!lvl.openedDoorMsgShown){ logMsg("Opened a door."); lvl.openedDoorMsgShown = true; }
       return true;
     }
@@ -8203,6 +8291,7 @@ if(dx===0 && dy===0) continue;
       if(game.inv.keys <= 0){
         if(LOCKED_DOOR_BREAKS_WITHOUT_KEY){
           setTileWithAnim(lvl, x, y, TILE.LDOOR_O, "forced_open");
+          playSfx("door_break");
           if(hasInvincible()){
             logMsg("No key — forced the lock. It shatters harmlessly.");
           } else if(LOCK_BREAK_DAMAGE > 0){
@@ -8218,6 +8307,7 @@ if(dx===0 && dy===0) continue;
           }
         } else {
           logMsg("Locked. A key is needed.");
+          playSfx("locked_bump");
           try{ startTileAnim(x, y, "locked_bump", 1200); startTileAnim(x, y, "spark", 700); }catch(_){}
         }
         return true;
@@ -8225,18 +8315,21 @@ if(dx===0 && dy===0) continue;
 
       game.inv.keys--;
       setTileWithAnim(lvl, x, y, TILE.LDOOR_O, "forced_open");
+      playSfx("door_key_open");
       logMsg("Unlocked and opened the door.");
       return true;
     }
 
     if(t === TILE.SD_C){
       setTileWithAnim(lvl, x, y, TILE.SD_O, "secret_open");
+      playSfx("door_secret");
       logMsg("Opened a secret door.");
       return true;
     }
 
     if(t === TILE.CAVE_C){
       setTileWithAnim(lvl, x, y, TILE.CAVE_O, "secret_open");
+      playSfx("cave_opening");
       logMsg("The damp darkness closes around you.");
       return true;
     }
@@ -8558,7 +8651,9 @@ if(!__wasInBlackout && __nowInBlackout){
     const nowInCave = (p.y >= CAVE_Y0);
     if(!wasInCave && nowInCave){ onEnterCaves(); fireLoreOnce(`cave_enter_${game.depth}`, "The world narrows. Your torch becomes a small argument."); }
     if(wasInCave && !nowInCave) onExitCaves();
-    playSfx('step');
+    const __t = lvl.tiles[p.x][p.y];
+    if(__t === TILE.CORPSE) playSfx('step_corpsefield');
+    else playSfx('step');
 
     musicUserActivity();
 
@@ -8606,7 +8701,7 @@ if(!__wasInBlackout && __nowInBlackout){
         logMsg("You float over the trap unharmed.");
       } else {
         game.hp -= tr.dmg;
-        playSfx('damage');
+        playSfx('trap_trigger');
         logMsg(`A trap springs! Took ${tr.dmg} damage.`);
         if(game.hp <= 0){
           game.hp = 0;
@@ -8630,13 +8725,13 @@ if(!__wasInBlackout && __nowInBlackout){
           logMsg(`Potion satchel full (cap ${POTION_CAP}). Left potion behind.`);
         } else {
           game.inv.potions.push(it.potion || POTION.HEAL);
-          playSfx('pickup');
+          playSfx('pickup_potion');
           logMsg(`Picked up a ${POTION_NAME[it.potion || POTION.HEAL]} potion (!).`);
           lvl.items.delete(mk);
         }
       }
       else if(SCROLL_COLOR[it.type]){ // scroll glyph item (auto-read on pickup)
-        playSfx('pickup');
+        playSfx('pickup_scroll');
         const nm = SCROLL_NAME[it.type] || 'Mystery';
         if(it.type === "☼"){ // Illumination
           // In caves, Illumination creates a stationary glow (anchor light) until level change.
@@ -8701,7 +8796,7 @@ else if(it.type === ENT.CHEST){
         } else {
           logMsg(`Found treasure ($): +${gold + cgold} gold.${cgold>0 ? ' Some of the coin is stained.' : ''}`);
         }
-        playSfx('pickup');
+        playSfx('pickup_chest');
         lvl.items.delete(mk);
       } else if(it.type === ENT.WEAPON){
         // Defensive: weapon items may be malformed (e.g., post-defeat drops). Never let that break rendering.
@@ -8710,7 +8805,7 @@ else if(it.type === ENT.CHEST){
 
         game.atk = Math.max(game.atk, safeAtk);
         game.weaponName = safeName;
-        playSfx('pickup');
+        playSfx('pickup_weapon');
         const _hadWeapon = game.weaponEquipped;
         game.weaponEquipped = true;
 // Lore: weapon acquisition / upgrades (run-persistent)
@@ -8734,6 +8829,7 @@ if(_hadWeapon) game.weaponUpgradeCount++;
           logMsg(`Torch pack full (cap ${TORCH_CAP}). Left torch behind.`);
         } else {
           game.inv.torches += take;
+          playSfx('torch_pickup');
           logMsg(take === 1 ? "Picked up a torch (t)." : `Picked up ${take} torches (t).`);
 
           if(take >= cnt){
@@ -8754,7 +8850,7 @@ if(_hadWeapon) game.weaponUpgradeCount++;
           logMsg(`Key ring full (cap ${KEY_CAP}). Left key behind.`);
         } else {
           game.inv.keys++;
-          playSfx('pickup');
+          playSfx('pickup_key');
           logMsg("Picked up a key.");
           lvl.items.delete(mk);
         }
